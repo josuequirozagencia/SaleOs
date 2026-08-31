@@ -11,8 +11,15 @@ import { ApiError } from "../utils/errors";
 
 export type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
+export type ExtendedRequest = IncomingMessage & {
+  session?: import("../types").AuthSession;
+  body?: unknown;
+  params?: Record<string, string>;
+  query?: URLSearchParams;
+};
+
 export interface RouteContext {
-  req: IncomingMessage & { session?: import("../types").AuthSession; body?: unknown; params: Record<string, string>; query: URLSearchParams };
+  req: ExtendedRequest;
   res: ServerResponse;
   /** resolved params from the path match */
   params: Record<string, string>;
@@ -24,8 +31,12 @@ export interface RouteContext {
   session: import("../types").AuthSession | undefined;
 }
 
-type Handler = (ctx: RouteContext) => Promise<void> | void;
-type Middleware = (req: IncomingMessage & { session?: import("../types").AuthSession }, res: ServerResponse, next: (err?: unknown) => void) => void;
+export type Handler = (ctx: RouteContext) => Promise<unknown> | unknown;
+export type Middleware = (
+  req: ExtendedRequest,
+  res: ServerResponse,
+  next: (err?: unknown) => void
+) => void;
 
 interface Route {
   method: HttpMethod;
@@ -75,25 +86,49 @@ export class Router {
     return this;
   }
 
-  get(path: string, ...rest: [...Middleware[], Handler]) {
-    const [handler, ...mws] = rest.reverse();
-    this.add("GET", path, mws.reverse(), handler as Handler);
+  get(path: string, handler: Handler): void;
+  get(path: string, mw1: Middleware, handler: Handler): void;
+  get(path: string, mw1: Middleware, mw2: Middleware, handler: Handler): void;
+  get(path: string, ...rest: any[]) {
+    const handler = rest[rest.length - 1] as Handler;
+    const mws = (rest.slice(0, -1) as unknown) as Middleware[];
+    this.add("GET", path, mws, handler);
   }
-  post(path: string, ...rest: [...Middleware[], Handler]) {
-    const [handler, ...mws] = rest.reverse();
-    this.add("POST", path, mws.reverse(), handler as Handler);
+
+  post(path: string, handler: Handler): void;
+  post(path: string, mw1: Middleware, handler: Handler): void;
+  post(path: string, mw1: Middleware, mw2: Middleware, handler: Handler): void;
+  post(path: string, ...rest: any[]) {
+    const handler = rest[rest.length - 1] as Handler;
+    const mws = (rest.slice(0, -1) as unknown) as Middleware[];
+    this.add("POST", path, mws, handler);
   }
-  patch(path: string, ...rest: [...Middleware[], Handler]) {
-    const [handler, ...mws] = rest.reverse();
-    this.add("PATCH", path, mws.reverse(), handler as Handler);
+
+  patch(path: string, handler: Handler): void;
+  patch(path: string, mw1: Middleware, handler: Handler): void;
+  patch(path: string, mw1: Middleware, mw2: Middleware, handler: Handler): void;
+  patch(path: string, ...rest: any[]) {
+    const handler = rest[rest.length - 1] as Handler;
+    const mws = (rest.slice(0, -1) as unknown) as Middleware[];
+    this.add("PATCH", path, mws, handler);
   }
-  put(path: string, ...rest: [...Middleware[], Handler]) {
-    const [handler, ...mws] = rest.reverse();
-    this.add("PUT", path, mws.reverse(), handler as Handler);
+
+  put(path: string, handler: Handler): void;
+  put(path: string, mw1: Middleware, handler: Handler): void;
+  put(path: string, mw1: Middleware, mw2: Middleware, handler: Handler): void;
+  put(path: string, ...rest: any[]) {
+    const handler = rest[rest.length - 1] as Handler;
+    const mws = (rest.slice(0, -1) as unknown) as Middleware[];
+    this.add("PUT", path, mws, handler);
   }
-  delete(path: string, ...rest: [...Middleware[], Handler]) {
-    const [handler, ...mws] = rest.reverse();
-    this.add("DELETE", path, mws.reverse(), handler as Handler);
+
+  delete(path: string, handler: Handler): void;
+  delete(path: string, mw1: Middleware, handler: Handler): void;
+  delete(path: string, mw1: Middleware, mw2: Middleware, handler: Handler): void;
+  delete(path: string, ...rest: any[]) {
+    const handler = rest[rest.length - 1] as Handler;
+    const mws = (rest.slice(0, -1) as unknown) as Middleware[];
+    this.add("DELETE", path, mws, handler);
   }
 
   /** Returns the main request handler for http.createServer. */
@@ -119,26 +154,16 @@ export class Router {
         // Run route middleware chain
         const mws = route.middlewares;
         let idx = 0;
-        const extReq = req as IncomingMessage & { session?: import("../types").AuthSession };
-        const runMw = (err?: unknown): void => {
-          if (err) return sendError(res, err);
-          if (idx >= mws.length) {
-            // all middleware passed — parse body then run handler
-            return runHandler();
-          }
-          const mw = mws[idx++];
-          try {
-            mw(extReq, res, runMw);
-          } catch (e) {
-            sendError(res, e);
-          }
-        };
+        const extReq = req as ExtendedRequest;
+        extReq.params = params;
+        extReq.query = query;
 
         const runHandler = async () => {
           let body: unknown = undefined;
           if (method === "POST" || method === "PATCH" || method === "PUT") {
             body = await parseBody(req);
           }
+          extReq.body = body;
           const ctx: RouteContext = {
             req: extReq,
             res,
@@ -154,6 +179,21 @@ export class Router {
               sendJson(res, 200, result);
             }
             logger.info(`${res.statusCode} ${method} ${url.pathname} ${Date.now() - startedAt}ms`, { requestId, tenantId: extReq.session?.tenantId, userId: extReq.session?.ghlUserId });
+          } catch (e) {
+            sendError(res, e);
+          }
+        };
+
+        const runMw = (err?: unknown): void => {
+          if (err) return sendError(res, err);
+          if (idx >= mws.length) {
+            // all middleware passed — parse body then run handler
+            runHandler().catch((e) => sendError(res, e));
+            return;
+          }
+          const mw = mws[idx++];
+          try {
+            mw(extReq, res, runMw);
           } catch (e) {
             sendError(res, e);
           }
