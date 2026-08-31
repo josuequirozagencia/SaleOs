@@ -22,9 +22,12 @@ const realInstance = new GhlProvider();
  * provider is used with per-tenant credentials injected server-side.
  */
 export function getProvider(_tenantId: string): CrmProvider {
-  const useMock = (process.env.USE_MOCK ?? "true").toLowerCase() !== "false";
+  // Mock is opt-in ONLY: defaults to real mode so the app connects to the real
+  // CRM sub-account whenever credentials are present. Set USE_MOCK=true to
+  // force mock for local development.
+  const useMock = (process.env.USE_MOCK ?? "false").toLowerCase() === "true";
   if (useMock) return mockInstance;
-  // Real mode: only use the real provider if credentials exist for the tenant.
+  // Real mode: use the real provider when credentials exist for the tenant.
   if (hasTenantCreds(_tenantId)) return realInstance;
   // Fallback to mock when credentials are missing (dev safety net).
   return mockInstance;
