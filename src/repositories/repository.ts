@@ -96,11 +96,18 @@ export interface CatalogRepository {
 }
 
 /**
- * The aggregate repository interface. A database-backed implementation
+ * The aggregate repository contract. A database-backed implementation
  * implements this; the MockProvider delegates to its in-memory stores.
  * Swapping is a one-line change in providerService.
+ *
+ * Implemented as a type intersection (not `interface extends`) because the
+ * composed repositories intentionally share method names (`list`, `create`,
+ * `cancel`, `listByContact`) with different signatures/return types. An
+ * intersection produces method overloads for those names, which composes
+ * correctly; `interface extends` would instead require identical
+ * signatures and fail to compile. No runtime or behavioral change.
  */
-export interface AppRepository extends
-  MatriculaRepository, FollowUpRepository, NoteRepository,
-  ScheduledMessageRepository, TimelineRepository, AuditRepository,
-  ConfigRepository, CatalogRepository {}
+export type AppRepository =
+  MatriculaRepository & FollowUpRepository & NoteRepository &
+  ScheduledMessageRepository & TimelineRepository & AuditRepository &
+  ConfigRepository & CatalogRepository;
