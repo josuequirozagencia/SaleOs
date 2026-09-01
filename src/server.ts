@@ -15,27 +15,45 @@ import { createApp } from "./app";
 import { startScheduler, stopScheduler } from "./jobs/schedulerJob";
 import { config } from "./config/env";
 import { logger } from "./utils/router";
+import { runMigrations } from "./db/migrations";
+import { dbAvailable } from "./db/client";
 
 const router = createApp();
-const server = createServer(router.handler());
 
-server.listen(config.port, () => {
-  logger.info(`SalesOS backend listening on :${config.port} (${config.nodeEnv})`);
-  if (config.nodeEnv !== "test") startScheduler();
-});
+async function bootstrap() {
+  // Apply DB migrations before accepting traffic. In production a missing
+  // DATABASE_URL is a hard failure (no silent in-memory fallback).
+  if (config.nodeEnv === "production" && !config.databaseUrl) {
+    throw new Error("DATABASE_URL is required in production");
+  }
+  if (dbAvailable()) {
+    await runMigrations();
+    logger.info("Database migrations applied");
+  } else {
+    logger.warn("No DATABASE_URL — running with in-memory stores (dev only)");
+  }
 
-function shutdown(signal: string) {
-  logger.info(`${signal} received — shutting down gracefully`);
-  stopScheduler();
-  server.close(() => {
-    logger.info("HTTP server closed");
-    process.exit(0);
+  const server = createServer(router.handler());
+  server.listen(config.port, () => {
+    logger.info(`BeautyCRM backend listening on :${config.port} (${config.nodeEnv})`);
+    if (config.nodeEnv !== "test") startScheduler();
   });
-  // Force exit after 10s if connections don't drain.
-  setTimeout(() => process.exit(1), 10_000).unref();
+
+  function shutdown(signal: string) {
+    logger.info(`${signal} received — shutting down gracefully`);
+    stopScheduler();
+    server.close(() => {
+      logger.info("HTTP server closed");
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10_000).unref();
+  }
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
-
-export { server };
+bootstrap().catch((err) => {
+  logger.error(err);
+  process.exit(1);
+});
