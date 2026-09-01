@@ -35,24 +35,27 @@ export function integrationRoutes(router: Router) {
 
   // Config (token + locationId). Admin-only. Token stored encrypted, never returned.
   router.get("/integration/config", requireAuth, async (ctx) => {
-    ok(ctx, tenantRepo.masked(ctx.session!.tenantId));
+    ok(ctx, await tenantRepo.masked(ctx.session!.tenantId));
   });
 
   router.put("/integration/config", requireAuth, async (ctx) => {
     requireSuperAdmin(ctx.session!);
     const { token, locationId } = (ctx.body ?? {}) as { token?: string; locationId?: string };
     const tenantId = ctx.session!.tenantId;
-    tenantRepo.saveCredentials(tenantId, token ?? "", locationId ?? "");
-    if (token) setTenantCreds(tenantId, { token, locationId: locationId ?? tenantRepo.get(tenantId)?.ghlLocationId ?? "" });
-    auditRepo.record({ tenantId, ghlUserId: ctx.session!.ghlUserId, action: "integration_config_saved", resource: "integration", resourceId: tenantId });
-    ok(ctx, tenantRepo.masked(tenantId));
+    await tenantRepo.saveCredentials(tenantId, token ?? "", locationId ?? "");
+    if (token) {
+      const t = await tenantRepo.get(tenantId);
+      setTenantCreds(tenantId, { token, locationId: locationId ?? t?.ghlLocationId ?? "" });
+    }
+    await auditRepo.record({ tenantId, ghlUserId: ctx.session!.ghlUserId, action: "integration_config_saved", resource: "integration", resourceId: tenantId });
+    ok(ctx, await tenantRepo.masked(tenantId));
   });
 
   router.delete("/integration/config", requireAuth, async (ctx) => {
     requireSuperAdmin(ctx.session!);
     const tenantId = ctx.session!.tenantId;
-    tenantRepo.clearCredentials(tenantId);
-    auditRepo.record({ tenantId, ghlUserId: ctx.session!.ghlUserId, action: "integration_config_cleared", resource: "integration", resourceId: tenantId });
-    ok(ctx, tenantRepo.masked(tenantId));
+    await tenantRepo.clearCredentials(tenantId);
+    await auditRepo.record({ tenantId, ghlUserId: ctx.session!.ghlUserId, action: "integration_config_cleared", resource: "integration", resourceId: tenantId });
+    ok(ctx, await tenantRepo.masked(tenantId));
   });
 }
