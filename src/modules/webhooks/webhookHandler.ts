@@ -50,9 +50,9 @@ export interface WebhookPayload {
  * single-tenant dev path), we fall back to "default" ONLY when that tenant is
  * registered. Unknown tenants are rejected.
  */
-function resolveTenant(tenantIdFromUrl?: string): string {
+async function resolveTenant(tenantIdFromUrl?: string): Promise<string> {
   const tenantId = tenantIdFromUrl ?? "default";
-  const tenant = tenantRepo.get(tenantId);
+  const tenant = await tenantRepo.get(tenantId);
   if (!tenant) {
     throw new ApiError("UNAUTHORIZED", "Unknown webhook tenant channel");
   }
@@ -88,12 +88,12 @@ export async function handleWebhook(
   }
 
   // Idempotency: skip already-processed events.
-  if (idempotencyStore.seen(payload.eventId)) {
+  if (await idempotencyStore.seen(payload.eventId, tenantIdFromUrl)) {
     return { ok: true, duplicate: true };
   }
 
   // Authoritative tenant comes from the signed URL channel, NEVER the body.
-  const tenantId = resolveTenant(tenantIdFromUrl);
+  const tenantId = await resolveTenant(tenantIdFromUrl);
   const provider: CrmProvider = getProvider(tenantId);
   const d = payload.data;
 
