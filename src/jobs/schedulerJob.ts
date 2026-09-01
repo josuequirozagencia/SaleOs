@@ -18,21 +18,21 @@ import { getProvider } from "../services/providerService";
 import { tenantRepo } from "../repositories/tenantRepo";
 import { config } from "../config/env";
 import { logger } from "../utils/router";
+import { runAutomationTick } from "../modules/automations/automationEngine";
 
 let running = false;
 
-/** Active tenant ids to process. In single-tenant dev this is ["default"]. */
-function activeTenants(): string[] {
-  // tenantRepo is in-memory; in production this queries active tenants from DB.
-  const t = tenantRepo.get("default");
-  return t ? ["default"] : [];
+/** Active tenant ids to process. Queries active tenants from the registry. */
+async function activeTenants(): Promise<string[]> {
+  const tenants = await tenantRepo.listActive();
+  return tenants.map((t) => t.id);
 }
 
 export async function runSchedulerTick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    for (const tenantId of activeTenants()) {
+    for (const tenantId of await activeTenants()) {
       const provider = getProvider(tenantId);
       const due = await provider.listDueScheduledMessages(tenantId, Date.now());
       for (const sm of due) {
@@ -48,6 +48,9 @@ export async function runSchedulerTick(): Promise<void> {
         }
       }
     }
+    // Automation sweep: lead-sin-respuesta alerts (>5 min). Runs after the
+    // scheduled-message pass so message sends are not delayed by the sweep.
+    await runAutomationTick().catch((err) => logger.error(err));
   } finally {
     running = false;
   }
