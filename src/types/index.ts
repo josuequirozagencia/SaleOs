@@ -9,6 +9,12 @@
 
 export type Role = "super_admin" | "admin" | "supervisor" | "advisor";
 
+// Pipeline & Opportunity domain types (defined in ./opportunities to keep
+// this file focused).
+export type {
+  PipelineStageInfo, Pipeline, Opportunity, PaginatedOpportunities,
+} from "./opportunities";
+
 export type UserSource = "highlevel" | "salesos";
 export type UserSyncStatus = "synced" | "pending" | "error" | "disabled" | "not_found";
 
@@ -156,7 +162,7 @@ export interface Matricula {
   date: number;
   status: MatriculaStatus;
   assignedTo: string;
-  programId?: string;
+  programId?: string; notes?: string;
   customFields?: Record<string, string | string[] | boolean | number>;
   createdAt?: number;
   updatedAt?: number;
@@ -317,7 +323,7 @@ export interface FollowUp {
   reason: string;
   status: FollowUpStatus;
   type: FollowUpType;
-  note?: string;
+  note?: string; createdAt?: number; completedAt?: number;
   tenantId?: string;
 }
 
@@ -474,11 +480,21 @@ export interface Tenant {
 // ── Auth session ──────────────────────────────────────────────────────
 
 export interface AuthSession {
+  /** Unique session id (jti) — used for revocation. */
+  jti: string;
   ghlUserId: string;
   role: Role;
   tenantId: string;
+  /** CRM location/sub-account the session is bound to (multi-tenant). */
+  locationId: string;
+  /** Data scope derived server-side from the role. */
+  scope: "all" | "team" | "self";
   /** "viewAs" target when a super admin impersonates. */
   viewAsUserId?: string | null;
+  /** Issued-at (epoch seconds). */
+  iat?: number;
+  /** Expiry (epoch seconds). */
+  exp?: number;
 }
 
 export const MATRICULA_DUPLICATE_CODE = "MATRICULA_EXISTENTE";
