@@ -17,6 +17,17 @@ import type { CrmProvider } from "../crmProvider";
 import type { ListParams } from "../crmProvider";
 import { ApiError, providerError } from "../../utils/errors";
 import { config } from "../../config/env";
+import {
+  mapCrmUser,
+  mapCrmContact,
+  mapCrmConversation,
+  mapCrmMessage,
+  mapCrmCalendar,
+  mapCrmSlot,
+  mapCrmAppointment,
+} from "./mappers";
+import { mapCrmPipeline, mapCrmOpportunity } from "./opportunityMappers";
+import type { Pipeline, Opportunity, PaginatedOpportunities } from "../../types";
 
 export interface TenantCreds {
   token: string;
@@ -96,39 +107,48 @@ export class GhlProvider implements CrmProvider {
   async listUsers(tenantId: string) {
     const creds = getTenantCreds(tenantId);
     const data = await ghlFetch<{ users: any[] }>(tenantId, `/users/?locationId=${creds.locationId}`);
-    return data.users as any[];
+    return (data.users || []).map(mapCrmUser);
   }
   async getUser(tenantId: string, ghlUserId: string) {
     try {
-      return await ghlFetch<any>(tenantId, `/users/${ghlUserId}`);
+      const data = await ghlFetch<any>(tenantId, `/users/${ghlUserId}`);
+      return data ? mapCrmUser(data.user || data) : null;
     } catch (err) {
       if (err instanceof ApiError && err.code === "PROVIDER_ERROR") return null;
       throw err;
     }
   }
-  async getUserProfile(_t: string, _id: string): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "User profile is app-local data"); }
-  async updateUserProfile(_t: string, _id: string, _u: any): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "User profile is app-local data"); }
+  // User profile preferences (theme, language, monthlyGoal, commission, …)
+  // are NOT a CRM concept — the CRM platform exposes no endpoint for them.
+  // They are BeautyCRM-owned configuration and persist in PostgreSQL, scoped
+  // by tenant_id + ghl_user_id (see DbProvider). The CRM provider must never
+  // invent or hardcode these values, so it reports the capability as
+  // unavailable rather than returning a static profile.
+  async getUserProfile(_t: string, _ghlUserId: string): Promise<any> {
+    throw new ApiError("PROVIDER_UNAVAILABLE", "User profile preferences are app-local data (not a CRM entity)");
+  }
+  async updateUserProfile(_t: string, _ghlUserId: string, _updates: any): Promise<any> {
+    throw new ApiError("PROVIDER_UNAVAILABLE", "User profile preferences are app-local data (not a CRM entity)");
+  }
   async getLocation(tenantId: string) {
     const creds = getTenantCreds(tenantId);
     return ghlFetch<any>(tenantId, `/locations/${creds.locationId}`);
   }
   async createUser(tenantId: string, data: { name: string; email: string; phone?: string; role: any }) {
     const creds = getTenantCreds(tenantId);
-    // NOTE: User creation endpoint must be confirmed against official docs.
-    // The CRM Private API v2.0 exposes user management; the exact payload
-    // (name/email/phone/role) is mapped here. If the platform rejects a
-    // field, the error surfaces as PROVIDER_ERROR (never silently faked).
-    return ghlFetch<any>(tenantId, `/users/`, {
+    const res = await ghlFetch<any>(tenantId, `/users/`, {
       method: "POST",
       body: JSON.stringify({ locationId: creds.locationId, name: data.name, email: data.email, phone: data.phone, role: data.role }),
     });
+    return mapCrmUser(res.user || res);
   }
   async updateUser(tenantId: string, ghlUserId: string, updates: Partial<Pick<any, "name" | "email" | "phone" | "role">>) {
-    return ghlFetch<any>(tenantId, `/users/${ghlUserId}`, { method: "PUT", body: JSON.stringify(updates) });
+    const res = await ghlFetch<any>(tenantId, `/users/${ghlUserId}`, { method: "PUT", body: JSON.stringify(updates) });
+    return mapCrmUser(res.user || res);
   }
   async disableUser(tenantId: string, ghlUserId: string) {
-    // Deactivate (soft delete) — the exact method/path must be confirmed.
-    return ghlFetch<any>(tenantId, `/users/${ghlUserId}`, { method: "DELETE" });
+    const res = await ghlFetch<any>(tenantId, `/users/${ghlUserId}`, { method: "DELETE" });
+    return mapCrmUser(res.user || res);
   }
   async syncUsers(tenantId: string) {
     // Sync = fetch all users from the CRM platform. The route layer maps
@@ -145,7 +165,7 @@ export class GhlProvider implements CrmProvider {
     const body: Record<string, unknown> = {
       locationId: creds.locationId,
       pageLimit: p.pageSize ?? 25,
-      page: (p.page ?? 1) - 1,
+      page: p.page ?? 1,
     };
     if (p.search) body.query = p.search;
     const data = await ghlFetch<{ contacts: any[]; total?: number; count?: number }>(
@@ -153,22 +173,28 @@ export class GhlProvider implements CrmProvider {
       `/contacts/search`,
       { method: "POST", body: JSON.stringify(body) }
     );
+    const contactsArr = (data.contacts || []).map(mapCrmContact);
     return {
-      data: data.contacts,
-      total: data.total ?? data.count ?? data.contacts.length,
+      data: contactsArr,
+      total: data.total ?? data.count ?? contactsArr.length,
       page: p.page ?? 1,
       pageSize: p.pageSize ?? 25,
-      hasMore: data.contacts.length === (p.pageSize ?? 25),
+      hasMore: contactsArr.length === (p.pageSize ?? 25),
     };
   }
-  async getContact(tenantId: string, id: string) { return ghlFetch<any>(tenantId, `/contacts/${id}`); }
+  async getContact(tenantId: string, id: string) {
+    const data = await ghlFetch<any>(tenantId, `/contacts/${id}`);
+    return data ? mapCrmContact(data.contact || data) : null;
+  }
   async updateContactOwner(tenantId: string, id: string, ghlUserId: string) {
     const creds = getTenantCreds(tenantId);
-    return ghlFetch<any>(tenantId, `/contacts/${id}`, { method: "PUT", body: JSON.stringify({ locationId: creds.locationId, assignedTo: ghlUserId }) });
+    const res = await ghlFetch<any>(tenantId, `/contacts/${id}`, { method: "PUT", body: JSON.stringify({ locationId: creds.locationId, assignedTo: ghlUserId }) });
+    return mapCrmContact(res.contact || res);
   }
   async updateContactTags(tenantId: string, id: string, tags: string[]) {
     const creds = getTenantCreds(tenantId);
-    return ghlFetch<any>(tenantId, `/contacts/${id}`, { method: "PUT", body: JSON.stringify({ locationId: creds.locationId, tags }) });
+    const res = await ghlFetch<any>(tenantId, `/contacts/${id}`, { method: "PUT", body: JSON.stringify({ locationId: creds.locationId, tags }) });
+    return mapCrmContact(res.contact || res);
   }
 
   // ── Conversations / Messages ─────────────────────────────────────
@@ -180,7 +206,7 @@ export class GhlProvider implements CrmProvider {
     const q = new URLSearchParams({
       locationId: creds.locationId,
       pageLimit: String(p.pageSize ?? 25),
-      page: String(((p.page ?? 1) - 1)),
+      page: String(p.page ?? 1),
     });
     if (p.search) q.set("search", p.search);
     if (p.assignedTo) q.set("assignedTo", p.assignedTo);
@@ -190,35 +216,37 @@ export class GhlProvider implements CrmProvider {
       tenantId,
       `/conversations/search?${q}`
     );
+    const convArr = (data.conversations || []).map(mapCrmConversation);
     return {
-      data: data.conversations ?? [],
-      total: data.total ?? data.conversations?.length ?? 0,
+      data: convArr,
+      total: data.total ?? convArr.length,
       page: p.page ?? 1,
       pageSize: p.pageSize ?? 25,
-      hasMore: (data.conversations?.length ?? 0) === (p.pageSize ?? 25),
+      hasMore: convArr.length === (p.pageSize ?? 25),
     };
   }
   async getConversation(tenantId: string, conversationId: string) {
-    return ghlFetch<any>(tenantId, `/conversations/${conversationId}`);
+    const data = await ghlFetch<any>(tenantId, `/conversations/${conversationId}`);
+    return data ? mapCrmConversation(data.conversation || data) : null;
   }
-  // Messages endpoint: GET /conversations/{id}/messages?limit=&offset=
-  // Response shape: { messages: { messages: [...], lastMessageId, nextPage } }
   async getConversationMessages(tenantId: string, conversationId: string, page: number, pageSize: number) {
     const data = await ghlFetch<{ messages: any; messagesList?: any[]; lastMessageId?: string; nextPage?: boolean }>(
       tenantId,
       `/conversations/${conversationId}/messages?limit=${pageSize}&offset=${(page - 1) * pageSize}`
     );
-    // The API nests messages under `messages.messages`; handle both shapes.
-    const messagesArr = Array.isArray(data.messages) ? data.messages : (data.messages?.messages ?? []);
+    const rawArr = Array.isArray(data.messages) ? data.messages : (data.messages?.messages ?? []);
+    const messagesArr = rawArr.map(mapCrmMessage);
     return { data: messagesArr, total: messagesArr.length, page, pageSize, hasMore: data.nextPage ?? false };
   }
   async sendMessage(tenantId: string, conversationId: string, payload: any) {
     const creds = getTenantCreds(tenantId);
-    return ghlFetch<any>(tenantId, `/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ type: payload.attachment ? "TYPE_ATTACHMENT" : "text", ...payload, locationId: creds.locationId }) });
+    const res = await ghlFetch<any>(tenantId, `/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ type: payload.attachment ? "TYPE_ATTACHMENT" : "text", ...payload, locationId: creds.locationId }) });
+    return mapCrmMessage(res.message || res);
   }
   async sendTemplate(tenantId: string, conversationId: string, payload: any) {
     const creds = getTenantCreds(tenantId);
-    return ghlFetch<any>(tenantId, `/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ ...payload, type: "template", locationId: creds.locationId }) });
+    const res = await ghlFetch<any>(tenantId, `/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ ...payload, type: "template", locationId: creds.locationId }) });
+    return mapCrmMessage(res.message || res);
   }
   async getTemplates(tenantId: string) {
     const creds = getTenantCreds(tenantId);
@@ -227,16 +255,22 @@ export class GhlProvider implements CrmProvider {
   }
   async updateConversationTags(tenantId: string, id: string, tags: string[]) {
     const creds = getTenantCreds(tenantId);
-    return ghlFetch<any>(tenantId, `/conversations/${id}`, { method: "PUT", body: JSON.stringify({ locationId: creds.locationId, tags }) });
+    const res = await ghlFetch<any>(tenantId, `/conversations/${id}`, { method: "PUT", body: JSON.stringify({ locationId: creds.locationId, tags }) });
+    return mapCrmConversation(res.conversation || res);
   }
   async updateConversationPipeline(tenantId: string, id: string, stage: any) {
     const creds = getTenantCreds(tenantId);
-    return ghlFetch<any>(tenantId, `/conversations/${id}`, { method: "PUT", body: JSON.stringify({ locationId: creds.locationId, pipelineStage: stage }) });
+    const res = await ghlFetch<any>(tenantId, `/conversations/${id}`, { method: "PUT", body: JSON.stringify({ locationId: creds.locationId, pipelineStage: stage }) });
+    return mapCrmConversation(res.conversation || res);
   }
   async markConversationRead(tenantId: string, id: string) {
     await ghlFetch<any>(tenantId, `/conversations/${id}/messages/read`, { method: "POST", body: JSON.stringify({}) });
   }
-  async getConversationByContact(_t: string, _contactId: string): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Lookup by contact requires a search endpoint — use listConversations with contactId filter"); }
+  async getConversationByContact(tenantId: string, contactId: string): Promise<any> {
+    const list = await this.listConversations(tenantId, { pageSize: 50 });
+    const match = list.data.find((c) => c.contactId === contactId);
+    return match || null;
+  }
 
   // ── Matrículas ────────────────────────────────────────────────────
   async listMatriculas(_t: string, _a?: string): Promise<any[]> { throw new ApiError("PROVIDER_UNAVAILABLE", "Matrículas are app-local commercial data (not a CRM entity)"); }
@@ -331,34 +365,67 @@ export class GhlProvider implements CrmProvider {
   async listCalendars(tenantId: string, _a?: string) {
     const creds = getTenantCreds(tenantId);
     const data = await ghlFetch<any>(tenantId, `/calendars?locationId=${creds.locationId}`);
-    return data.calendars ?? [];
+    return (data.calendars || []).map(mapCrmCalendar);
   }
   async getSlots(tenantId: string, calendarId: string, from: number, to: number) {
-    // Official endpoint expects ISO-8601 date strings for startDate/endDate.
     const start = new Date(from).toISOString();
     const end = new Date(to).toISOString();
     const data = await ghlFetch<any>(tenantId, `/calendars/${calendarId}/free-slots?startDate=${start}&endDate=${end}`);
-    return data.slots ?? [];
+    return (data.slots || []).map((s: any) => mapCrmSlot(s, calendarId));
   }
   async listAppointments(tenantId: string, p: any) {
     const creds = getTenantCreds(tenantId);
     const data = await ghlFetch<any>(tenantId, `/appointments/?locationId=${creds.locationId}&limit=${p.pageSize ?? 25}&offset=${((p.page ?? 1) - 1) * (p.pageSize ?? 25)}`);
-    return { data: data.appointments ?? [], total: data.total ?? 0, page: p.page ?? 1, pageSize: p.pageSize ?? 25, hasMore: !!data.nextCursor };
+    const apptArr = (data.appointments || []).map(mapCrmAppointment);
+    return { data: apptArr, total: data.total ?? apptArr.length, page: p.page ?? 1, pageSize: p.pageSize ?? 25, hasMore: !!data.nextCursor };
   }
   async listAppointmentsByContact(_t: string, _c: string): Promise<any[]> { throw new ApiError("PROVIDER_UNAVAILABLE", "Use listAppointments with contactId filter"); }
-  async getAppointment(tenantId: string, id: string) { return ghlFetch<any>(tenantId, `/appointments/${id}`); }
+  async getAppointment(tenantId: string, id: string) {
+    const data = await ghlFetch<any>(tenantId, `/appointments/${id}`);
+    return data ? mapCrmAppointment(data.appointment || data) : null;
+  }
   async bookAppointment(tenantId: string, data: any) {
     const creds = getTenantCreds(tenantId);
-    return ghlFetch<any>(tenantId, `/appointments/`, { method: "POST", body: JSON.stringify({ ...data, locationId: creds.locationId }) });
+    const res = await ghlFetch<any>(tenantId, `/appointments/`, { method: "POST", body: JSON.stringify({ ...data, locationId: creds.locationId }) });
+    return mapCrmAppointment(res.appointment || res);
   }
   async updateAppointmentStatus(tenantId: string, id: string, status: any) {
-    return ghlFetch<any>(tenantId, `/appointments/${id}`, { method: "PUT", body: JSON.stringify({ status }) });
+    const res = await ghlFetch<any>(tenantId, `/appointments/${id}`, { method: "PUT", body: JSON.stringify({ status }) });
+    return mapCrmAppointment(res.appointment || res);
   }
   async rescheduleAppointment(tenantId: string, id: string, start: number, end: number) {
-    return ghlFetch<any>(tenantId, `/appointments/${id}/reschedule`, { method: "POST", body: JSON.stringify({ start, end }) });
+    const res = await ghlFetch<any>(tenantId, `/appointments/${id}/reschedule`, { method: "POST", body: JSON.stringify({ start, end }) });
+    return mapCrmAppointment(res.appointment || res);
   }
   async cancelAppointment(tenantId: string, id: string) {
     await ghlFetch<any>(tenantId, `/appointments/${id}`, { method: "DELETE" });
+  }
+
+  // ── Pipelines & Opportunities (Private API v2.0) ──────────────────
+  async listPipelines(tenantId: string): Promise<Pipeline[]> {
+    const creds = getTenantCreds(tenantId);
+    const data = await ghlFetch<any>(tenantId, `/opportunities/pipelines?locationId=${creds.locationId}`);
+    return (data.pipelines || []).map(mapCrmPipeline);
+  }
+  async listOpportunities(tenantId: string, p: ListParams): Promise<PaginatedOpportunities> {
+    const creds = getTenantCreds(tenantId);
+    const q = new URLSearchParams({
+      location_id: creds.locationId,
+      limit: String(p.pageSize ?? 50),
+      page: String(p.page ?? 1),
+    });
+    if (p.search) q.set("q", p.search);
+    if (p.assignedTo) q.set("assigned_to", p.assignedTo);
+    const data = await ghlFetch<any>(tenantId, `/opportunities/search?${q}`);
+    const opps = (data.opportunities || []).map(mapCrmOpportunity);
+    return { data: opps, total: data.meta?.total ?? opps.length, page: p.page ?? 1, pageSize: p.pageSize ?? 50, hasMore: opps.length === (p.pageSize ?? 50) };
+  }
+  async updateOpportunityStage(tenantId: string, id: string, stageId: string): Promise<Opportunity> {
+    const res = await ghlFetch<any>(tenantId, `/opportunities/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ pipelineStageId: stageId }),
+    });
+    return mapCrmOpportunity(res.opportunity || res);
   }
 
   // ── App config ──────────────────────────────────────────────────
