@@ -15,8 +15,8 @@
  *  - (future) OpenAiProvider / WhisperProvider : real transcription + analysis.
  */
 
-import { ApiError } from "../../utils/errors";
-import { config } from "../../config/env";
+import { ApiError } from "../utils/errors";
+import { config } from "../config/env";
 import type { CallAiAnalysis } from "../../types";
 
 export interface AiProvider {
