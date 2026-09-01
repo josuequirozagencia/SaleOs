@@ -6,10 +6,12 @@
  * All data is clearly fictitious and never persisted to disk.
  *
  * SECURITY: no secrets, no network calls. This is development-only.
+ *
+ * Seed data lives in mockSeed.ts (extracted to keep this file focused on
+ * provider logic and under the per-file line limit).
  */
 
-import type { CrmProvider } from "../crmProvider";
-import type { ListParams } from "../crmProvider";
+import type { CrmProvider, ListParams } from "../crmProvider";
 import { ApiError } from "../../utils/errors";
 import type {
   CrmUser, CrmLocation, Contact, Conversation, CrmMessage, MessageTemplate,
@@ -17,141 +19,54 @@ import type {
   AppointmentStatus, IntegrationState, StudyArea, Program, CustomField,
   QuickReply, FollowUp, ScheduledMessage, ContactNote, TimelineEvent,
   Paginated, AppConfig, IntegrationConfig, UserProfile, Achievement,
-  CurrencyConfig, Role,
+  CurrencyConfig, Role, Pipeline, Opportunity,
 } from "../../types";
 import { MATRICULA_DUPLICATE_CODE } from "../../types";
+import {
+  seedUsers, seedProfiles, seedLocation, seedContacts, seedConversations,
+  seedMessages, seedTemplates, seedMatriculas, seedCalls, seedAreas,
+  seedPrograms, seedCustomFields, seedQuickReplies, seedFollowUps,
+  seedScheduledMessages, seedNotes, seedTimeline, seedCalendars, seedSlots,
+  seedAppointments, seedPipelines, seedOpportunities, DEFAULT_CURRENCY,
+  seedAppConfig, setSeedAppConfig,
+} from "./mockSeed";
 
-// ── Seed data (fictitious) ──────────────────────────────────────────────
+// ── Mutable working copies (fictitious, in-memory) ────────────────────────
 
 const now = () => Date.now();
 const id = (p: string) => `${p}_${now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-const users: CrmUser[] = [
-  { ghlUserId: "u_admin", name: "Admin Global", email: "admin@demo.com", avatarColor: "#6366f1", initials: "AG", role: "super_admin", active: true, locationId: "loc_demo_001" },
-  { ghlUserId: "u_laura", name: "Laura", email: "laura@demo.com", avatarColor: "#ec4899", initials: "LA", role: "advisor", active: true, locationId: "loc_demo_001" },
-  { ghlUserId: "u_rommy", name: "Rommy", email: "rommy@demo.com", avatarColor: "#f59e0b", initials: "RO", role: "advisor", active: true, locationId: "loc_demo_001" },
-  { ghlUserId: "u_carolina", name: "Carolina", email: "carolina@demo.com", avatarColor: "#10b981", initials: "CA", role: "advisor", active: true, locationId: "loc_demo_001" },
-  { ghlUserId: "u_milka", name: "Milka", email: "milka@demo.com", avatarColor: "#8b5cf6", initials: "MI", role: "advisor", active: true, locationId: "loc_demo_001" },
-  { ghlUserId: "u_jenny", name: "Jenny", email: "jenny@demo.com", avatarColor: "#ef4444", initials: "JE", role: "advisor", active: true, locationId: "loc_demo_001" },
-];
-
-const profiles: Record<string, UserProfile> = Object.fromEntries(
-  users.map((u) => [u.ghlUserId, {
-    ghlUserId: u.ghlUserId, preferredTheme: "dark", appearance: "moderno",
-    favoriteColor: u.avatarColor, language: "es", timezone: "America/Lima",
-    monthlyGoal: 20000, commissionPercentage: 10, gamificationLevel: "BASE",
-    notificationPreferences: { newMessages: true, newLeads: true, matriculas: true, calls: true },
-  }]),
+const users: CrmUser[] = seedUsers.map((u) => ({ ...u }));
+const profiles: Record<string, UserProfile> = { ...seedProfiles };
+const location: CrmLocation = { ...seedLocation };
+const contacts: Contact[] = seedContacts.map((c) => ({ ...c }));
+const conversations: Conversation[] = seedConversations.map((c) => ({ ...c }));
+const messages: Record<string, CrmMessage[]> = Object.fromEntries(
+  Object.entries(seedMessages).map(([k, v]) => [k, v.map((m) => ({ ...m }))]),
 );
-
-const location: CrmLocation = { id: "loc_demo_001", name: "Academia Belleza Demo", phone: "+51987654321" };
-
-const contacts: Contact[] = [
-  { id: "c_1", name: "María González", phone: "+51911111111", email: "maria@demo.com", city: "Lima", channel: "whatsapp", area: "Cosmetología", experience: "Básica", sede: "Sede Central", tags: ["Interesada"], assignedTo: "u_laura", createdAt: now() - 86400000 * 5, lastActivityAt: now() - 3600000, leadScore: 75, matriculated: false, avatarColor: "#ec4899", initials: "MG" },
-  { id: "c_2", name: "Lucía Ramírez", phone: "+51922222222", email: "lucia@demo.com", city: "Arequipa", channel: "instagram", area: "Uñas", experience: "Intermedia", tags: ["Matriculado"], assignedTo: "u_rommy", createdAt: now() - 86400000 * 10, lastActivityAt: now() - 7200000, leadScore: 90, matriculated: true, matriculaId: "mt_seed_1", avatarColor: "#f59e0b", initials: "LR" },
-  { id: "c_3", name: "Sofía Torres", phone: "+51933333333", email: "sofia@demo.com", city: "Lima", channel: "whatsapp", area: "Maquillaje", experience: "Avanzada", tags: ["Seguimiento"], assignedTo: "u_carolina", createdAt: now() - 86400000 * 3, lastActivityAt: now() - 1800000, leadScore: 60, matriculated: false, avatarColor: "#10b981", initials: "ST" },
-  { id: "c_4", name: "Valeria Cruz", phone: "+51944444444", email: "valeria@demo.com", city: "Trujillo", channel: "messenger", area: "Micropigmentación", tags: [], assignedTo: "u_milka", createdAt: now() - 86400000 * 7, lastActivityAt: now() - 86400000, leadScore: 40, matriculated: false, avatarColor: "#8b5cf6", initials: "VC" },
-  { id: "c_5", name: "Daniela Ríos", phone: "+51955555555", email: "daniela@demo.com", city: "Lima", channel: "whatsapp", area: "Lashista", tags: ["Matriculado"], assignedTo: "u_jenny", createdAt: now() - 86400000 * 15, lastActivityAt: now() - 86400000 * 2, leadScore: 85, matriculated: true, matriculaId: "mt_seed_2", avatarColor: "#ef4444", initials: "DR" },
-];
-
-const conversations: Conversation[] = [
-  { id: "conv_1", contactId: "c_1", contactName: "María González", contactInitials: "MG", contactAvatarColor: "#ec4899", channel: "whatsapp", lastMessage: "¿Cuánto cuesta el curso?", lastTimestamp: now() - 3600000, unread: 2, assignedTo: "u_laura", tags: ["Interesada"], status: "open", pipelineStage: "venta" },
-  { id: "conv_2", contactId: "c_2", contactName: "Lucía Ramírez", contactInitials: "LR", contactAvatarColor: "#f59e0b", channel: "instagram", lastMessage: "Listo, ya aboné.", lastTimestamp: now() - 7200000, unread: 0, assignedTo: "u_rommy", tags: ["Matriculado"], status: "closed", pipelineStage: "matriculado" },
-  { id: "conv_3", contactId: "c_3", contactName: "Sofía Torres", contactInitials: "ST", contactAvatarColor: "#10b981", channel: "whatsapp", lastMessage: "Me interesa el horario de sábados.", lastTimestamp: now() - 1800000, unread: 1, assignedTo: "u_carolina", tags: ["Seguimiento"], status: "pending", pipelineStage: "seguimiento" },
-];
-
-const messages: Record<string, CrmMessage[]> = {
-  conv_1: [
-    { id: "m_1", conversationId: "conv_1", senderId: "c_1", direction: "inbound", text: "Hola, vi el anuncio del curso.", timestamp: now() - 7200000, status: "read", contentType: "text" },
-    { id: "m_2", conversationId: "conv_1", senderId: "u_laura", direction: "outbound", text: "¡Hola María! Claro, te cuento.", timestamp: now() - 7140000, status: "read", contentType: "text" },
-    { id: "m_3", conversationId: "conv_1", senderId: "c_1", direction: "inbound", text: "¿Cuánto cuesta el curso?", timestamp: now() - 3600000, status: "delivered", contentType: "text" },
-  ],
-  conv_2: [
-    { id: "m_4", conversationId: "conv_2", senderId: "c_2", direction: "inbound", text: "Quiero matricularme.", timestamp: now() - 9000000, status: "read", contentType: "text" },
-    { id: "m_5", conversationId: "conv_2", senderId: "u_rommy", direction: "outbound", text: "Perfecto, te paso los datos.", timestamp: now() - 8880000, status: "read", contentType: "text" },
-    { id: "m_6", conversationId: "conv_2", senderId: "c_2", direction: "inbound", text: "Listo, ya aboné.", timestamp: now() - 7200000, status: "read", contentType: "text" },
-  ],
-  conv_3: [
-    { id: "m_7", conversationId: "conv_3", senderId: "c_3", direction: "inbound", text: "Me interesa el horario de sábados.", timestamp: now() - 1800000, status: "delivered", contentType: "text" },
-  ],
-};
-
-const templates: MessageTemplate[] = [
-  { id: "tpl_1", name: "Bienvenida", body: "Hola {{1}}, bienvenida a la academia. ¿En qué te puedo ayudar?", category: "marketing", variables: 1 },
-  { id: "tpl_2", name: "Seguimiento", body: "Hola {{1}}, te escribo para darte seguimiento sobre el curso de {{2}}.", category: "utility", variables: 2 },
-];
-
-const matriculas: Matricula[] = [
-  { id: "mt_seed_1", contactId: "c_2", contactName: "Lucía Ramírez", contactPhone: "+51922222222", firstName: "Lucía", lastName: "Ramírez", area: "Uñas", areaId: "a_2", total: 1500, abono: 1500, pendiente: 0, paymentMethod: "yape", date: now() - 86400000 * 9, status: "matriculado", assignedTo: "u_rommy", programId: "p_2", createdAt: now() - 86400000 * 9, updatedAt: now() - 86400000 * 9 },
-  { id: "mt_seed_2", contactId: "c_5", contactName: "Daniela Ríos", contactPhone: "+51955555555", firstName: "Daniela", lastName: "Ríos", area: "Lashista", areaId: "a_4", total: 1200, abono: 600, pendiente: 600, paymentMethod: "transferencia", date: now() - 86400000 * 14, status: "matriculado", assignedTo: "u_jenny", programId: "p_4", createdAt: now() - 86400000 * 14, updatedAt: now() - 86400000 * 14 },
-];
-
-const calls: CallRecord[] = [
-  { id: "cl_seed_1", contactId: "c_1", contactName: "María González", ghlUserId: "u_laura", userName: "Laura", number: "+51911111111", direction: "outbound", status: "completed", startedAt: now() - 86400000, connectedAt: now() - 86400000 + 8000, endedAt: now() - 86400000 + 522000, duration: 522, effectiveDuration: 514, providerCallId: "prov_seed_1", createdAt: now() - 86400000, updatedAt: now() - 86400000 },
-  { id: "cl_seed_2", contactId: "c_3", contactName: "Sofía Torres", ghlUserId: "u_carolina", userName: "Carolina", number: "+51933333333", direction: "outbound", status: "missed", startedAt: now() - 43200000, duration: 0, providerCallId: "prov_seed_2", createdAt: now() - 43200000, updatedAt: now() - 43200000 },
-];
-
-const areas: StudyArea[] = [
-  { id: "a_1", name: "Cosmetología", active: true, order: 1 },
-  { id: "a_2", name: "Uñas", active: true, order: 2 },
-  { id: "a_3", name: "Maquillaje", active: true, order: 3 },
-  { id: "a_4", name: "Lashista", active: true, order: 4 },
-];
-
-const programs: Program[] = [
-  { id: "p_1", areaId: "a_1", name: "Cosmetología Profesional", active: true, order: 1 },
-  { id: "p_2", areaId: "a_2", name: "Manicura Profesional", active: true, order: 1 },
-  { id: "p_3", areaId: "a_3", name: "Maquillaje Social", active: true, order: 1 },
-  { id: "p_4", areaId: "a_4", name: "Extensión de Pestañas", active: true, order: 1 },
-];
-
-const customFields: CustomField[] = [
-  { id: "cf_1", name: "Ciudad", key: "ciudad", type: "TEXT", required: false, active: true, order: 1, placeholder: "Ciudad de residencia" },
-  { id: "cf_2", name: "Instagram", key: "instagram", type: "TEXT", required: false, active: true, order: 2, placeholder: "@usuario" },
-];
-
-const quickReplies: QuickReply[] = [
-  { id: "qr_1", name: "Saludo", content: "Hola {{contact.firstName}}, ¿cómo estás?", category: "general", active: true, updatedAt: now() },
-  { id: "qr_2", name: "Horarios", content: "Nuestros horarios son: lun-vie 9-18h, sáb 9-14h.", category: "info", active: true, updatedAt: now() },
-];
-
-const followUps: FollowUp[] = [
-  { id: "fu_1", contactId: "c_1", contactName: "María González", ghlUserId: "u_laura", dueAt: now() + 86400000, reason: "Enviar horarios", status: "pending", type: "whatsapp" },
-];
-
+const templates: MessageTemplate[] = seedTemplates.map((t) => ({ ...t }));
+const matriculas: Matricula[] = seedMatriculas.map((m) => ({ ...m }));
+const calls: CallRecord[] = seedCalls.map((c) => ({ ...c }));
+const areas: StudyArea[] = seedAreas.map((a) => ({ ...a }));
+const programs: Program[] = seedPrograms.map((p) => ({ ...p }));
+const customFields: CustomField[] = seedCustomFields.map((f) => ({ ...f }));
+const quickReplies: QuickReply[] = seedQuickReplies.map((q) => ({ ...q }));
+const followUps: FollowUp[] = seedFollowUps.map((f) => ({ ...f }));
 const scheduledMessages: ScheduledMessage[] = [];
-
-const notes: ContactNote[] = [
-  { id: "nt_1", contactId: "c_1", ghlUserId: "u_laura", text: "Interesada en turno mañana.", createdAt: now() - 86400000 },
-];
-
-const timeline: TimelineEvent[] = [
-  { id: "tl_1", contactId: "c_1", type: "contact_created", timestamp: now() - 86400000 * 5, title: "Contacto creado", ghlUserId: "u_laura" },
-  { id: "tl_2", contactId: "c_1", type: "message_received", timestamp: now() - 7200000, title: "Mensaje recibido", ghlUserId: "u_laura" },
-];
-
-const calendars: Calendar[] = [
-  { id: "cal_1", name: "Calendario Laura", assignedTo: "u_laura", active: true, timezone: "America/Lima", providerCalendarId: "ghl_cal_1" },
-  { id: "cal_2", name: "Calendario General", assignedTo: null, active: true, timezone: "America/Lima", providerCalendarId: "ghl_cal_2" },
-];
-
-const slots: TimeSlot[] = Array.from({ length: 6 }).map((_, i) => ({
-  id: `slot_${i}`, calendarId: "cal_1", start: now() + 86400000 + i * 3600000, end: now() + 86400000 + i * 3600000 + 1800000, available: true, providerSlotId: `ghl_slot_${i}`,
-}));
-
+const notes: ContactNote[] = seedNotes.map((n) => ({ ...n }));
+const timeline: TimelineEvent[] = seedTimeline.map((t) => ({ ...t }));
+const calendars: Calendar[] = seedCalendars.map((c) => ({ ...c }));
+const slots: TimeSlot[] = seedSlots.map((s) => ({ ...s }));
 const appointments: Appointment[] = [];
+const pipelines: Pipeline[] = seedPipelines.map((p) => ({ ...p, stages: [...p.stages] }));
+const opportunities: Opportunity[] = seedOpportunities.map((o) => ({ ...o }));
 
-const DEFAULT_CURRENCY: CurrencyConfig = {
-  currencyCode: "PEN", currencySymbol: "S/", currencyName: "Sol peruano",
-  decimalDigits: 2, decimalSeparator: ".", thousandsSeparator: ",", position: "before",
-};
-
-let appConfig: AppConfig = { appName: "BeautyCRM AI", currency: { ...DEFAULT_CURRENCY } };
+let appConfig: AppConfig = { ...seedAppConfig };
 
 const integrationConfigs = new Map<string, IntegrationConfig>();
 integrationConfigs.set("default", { hasToken: false, locationId: null, persisted: false });
 
-// ── Helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────
 
 function paginate<T>(items: T[], page: number, pageSize: number): Paginated<T> {
   const start = (page - 1) * pageSize;
@@ -163,7 +78,7 @@ function addTimeline(contactId: string, type: TimelineEvent["type"], title: stri
   timeline.push({ id: id("tl"), contactId, type, timestamp: now(), title, ghlUserId });
 }
 
-// ── Provider ─────────────────────────────────────────────────────────────
+// ── Provider ──────────────────────────────────────────────────────────────
 
 export class MockProvider implements CrmProvider {
   // Users / Location
@@ -208,7 +123,6 @@ export class MockProvider implements CrmProvider {
     return u;
   }
   async syncUsers(_t: string) {
-    // Idempotent sync: all seeded users are already present. Mark synced.
     let created = 0, updated = 0, unchanged = 0, errors = 0;
     for (const u of users) {
       if (!u.source) { u.source = "highlevel"; u.syncStatus = "synced"; u.lastSyncedAt = now(); updated++; }
@@ -294,6 +208,21 @@ export class MockProvider implements CrmProvider {
     return conversations.filter((c) => c.contactId === contactId).sort((a, b) => b.lastTimestamp - a.lastTimestamp)[0] ?? null;
   }
 
+  // Pipelines / Opportunities (CRM-native)
+  async listPipelines() { return [...pipelines]; }
+  async listOpportunities(_t: string, p: ListParams) {
+    let items = [...opportunities];
+    if (p.assignedTo && p.assignedTo !== "all") items = items.filter((o) => o.assignedTo === p.assignedTo);
+    if (p.search) { const q = p.search.toLowerCase(); items = items.filter((o) => o.name.toLowerCase().includes(q) || o.contactName.toLowerCase().includes(q)); }
+    return paginate(items, p.page ?? 1, p.pageSize ?? 25);
+  }
+  async updateOpportunityStage(_t: string, oid: string, stageId: string) {
+    const o = opportunities.find((x) => x.id === oid);
+    if (!o) throw new ApiError("NOT_FOUND", "Oportunidad no encontrada");
+    o.pipelineStageId = stageId; o.updatedAt = now();
+    return o;
+  }
+
   // Matrículas
   async listMatriculas(_t: string, assignedTo?: string) {
     let items = [...matriculas];
@@ -316,8 +245,6 @@ export class MockProvider implements CrmProvider {
     const m = matriculas.find((x) => x.id === mid);
     if (m) {
       m.status = "anulado"; m.updatedAt = now();
-      // Only revert the matriculated state if NO other active matrícula exists
-      // for the same contact (business rule: tag stays while any active matrícula remains).
       const otherActive = matriculas.some((x) => x.contactId === m.contactId && x.id !== m.id && x.status !== "anulado");
       const c = contacts.find((x) => x.id === m.contactId);
       if (c && !otherActive) { c.matriculated = false; c.matriculaId = undefined; c.tags = c.tags.filter((t) => t.toLowerCase() !== "matriculado"); }
@@ -394,7 +321,6 @@ export class MockProvider implements CrmProvider {
     const to = params.to ?? Date.now();
     const advisorFilter = params.advisorId && params.advisorId !== "all" ? params.advisorId : undefined;
 
-    // Collect all response intervals across conversations in range.
     const intervals: number[] = [];
     const byAdvisorMap = new Map<string, { answered: number; pending: number; unanswered: number; times: number[]; min: number; max: number }>();
 
@@ -415,7 +341,6 @@ export class MockProvider implements CrmProvider {
           if (!pendingCustomerMsg) pendingCustomerMsg = m;
           hadCustomerInPeriod = true;
         } else if (m.direction === "outbound" && m.visibility !== "internal" && pendingCustomerMsg) {
-          // First advisor reply to the pending customer message.
           const rt = Math.round((m.timestamp - pendingCustomerMsg.timestamp) / 1000);
           if (rt >= 0) {
             intervals.push(rt);
@@ -430,7 +355,6 @@ export class MockProvider implements CrmProvider {
         }
       }
 
-      // After processing, if a customer message is still pending → pending.
       if (pendingCustomerMsg) {
         byAdvisorMap.get(owner)!.pending++;
       } else if (hadCustomerInPeriod && !hadReply) {
@@ -539,9 +463,9 @@ export class MockProvider implements CrmProvider {
   // Integration
   async getIntegrationState(_t: string) { const cfg = integrationConfigs.get("default")!; return { status: cfg.hasToken ? "connected" : "disconnected", locationId: cfg.locationId, locationName: location.name, lastSyncAt: cfg.hasToken ? now() : null, syncedUsers: users.length, syncedContacts: contacts.length, syncedConversations: conversations.length, connectedPhone: location.phone ?? null } as IntegrationState; }
   async connectIntegration(t: string) { return this.getIntegrationState(t); }
-  async testIntegration(t: string) { return { ok: true, message: "Conexión exitosa" }; }
+  async testIntegration(_t: string) { return { ok: true, message: "Conexión exitosa" }; }
   async syncIntegration(t: string) { return this.getIntegrationState(t); }
-  async disconnectIntegration(t: string) { const cfg = integrationConfigs.get("default")!; integrationConfigs.set("default", { hasToken: false, locationId: null, persisted: false }); return this.getIntegrationState(t); }
+  async disconnectIntegration(t: string) { integrationConfigs.set("default", { hasToken: false, locationId: null, persisted: false }); return this.getIntegrationState(t); }
   async getIntegrationConfig(_t: string) { return integrationConfigs.get("default")!; }
   async saveIntegrationConfig(_t: string, token: string, locationId: string) { const cfg: IntegrationConfig = { hasToken: !!token, tokenLast4: token ? token.slice(-4) : undefined, locationId: locationId || null, persisted: true }; integrationConfigs.set("default", cfg); return cfg; }
   async clearIntegrationConfig(_t: string) { integrationConfigs.set("default", { hasToken: false, locationId: null, persisted: false }); return integrationConfigs.get("default")!; }
@@ -571,8 +495,8 @@ export class MockProvider implements CrmProvider {
   async getFollowUp(_t: string, fid: string) { return followUps.find((f) => f.id === fid) ?? null; }
   async createFollowUp(_t: string, data: Omit<FollowUp, "id" | "status">) { const f: FollowUp = { ...data, id: id("fu"), status: "pending" }; followUps.push(f); addTimeline(data.contactId, "followup_created", "Seguimiento creado", data.ghlUserId); return f; }
   async updateFollowUp(_t: string, fid: string, updates: Partial<FollowUp>) { const f = followUps.find((x) => x.id === fid); if (f) Object.assign(f, updates); return f!; }
-  async updateFollowUpStatus(_t: string, fid: string, status: FollowUp["status"]) { const f = followUps.find((x) => x.id === fid); if (f) { f.status = status; if (status === "completed") addTimeline(f.contactId, "followup_completed", "Seguimiento completado"); } return f!; }
-  async removeFollowUp(_t: string, fid: string) { const idx = followUps.findIndex((x) => x.id === fid); if (idx >= 0) followUps.splice(idx, 1); }
+  async updateFollowUpStatus(_t: string, fid: string, status: FollowUp["status"]) { const f = followUps.find((x) => x.id === fid); if (f) { f.status = status; if (status === "completed") { f.completedAt = now(); addTimeline(f.contactId, "followup_completed", "Seguimiento completado"); } } return f!; }
+  async removeFollowUp(_t: string, fid: string) { const idx = followUps.findIndex((f) => f.id === fid); if (idx >= 0) followUps.splice(idx, 1); }
   async listNotesByContact(_t: string, contactId: string) { return notes.filter((n) => n.contactId === contactId).sort((a, b) => b.createdAt - a.createdAt); }
   async createNote(_t: string, contactId: string, ghlUserId: string, text: string) { const n: ContactNote = { id: id("nt"), contactId, ghlUserId, text, createdAt: now() }; notes.push(n); return n; }
   async listTimelineByContact(_t: string, contactId: string) { return timeline.filter((t) => t.contactId === contactId).sort((a, b) => b.timestamp - a.timestamp); }
@@ -617,11 +541,11 @@ export class MockProvider implements CrmProvider {
 
   // App config
   async getAppConfig(_t: string) { return { ...appConfig }; }
-  async updateAppConfig(_t: string, updates: Partial<AppConfig>) { appConfig = { ...appConfig, ...updates }; return { ...appConfig }; }
+  async updateAppConfig(_t: string, updates: Partial<AppConfig>) { appConfig = { ...appConfig, ...updates }; setSeedAppConfig(appConfig); return { ...appConfig }; }
 
   // Currency config (per-tenant, presentation only)
   async getCurrency(_t: string) { return { ...(appConfig.currency ?? DEFAULT_CURRENCY) }; }
-  async updateCurrency(_t: string, config: CurrencyConfig) { appConfig = { ...appConfig, currency: { ...config } }; return { ...appConfig.currency! }; }
+  async updateCurrency(_t: string, config: CurrencyConfig) { appConfig = { ...appConfig, currency: { ...config } }; setSeedAppConfig(appConfig); return { ...appConfig.currency! }; }
 }
 
 export const mockProvider = new MockProvider();
