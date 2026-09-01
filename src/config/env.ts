@@ -29,7 +29,25 @@ export const config = {
     apiVersion: required("GHL_API_VERSION", "2021-07-28"),
     privateApiToken: process.env.GHL_PRIVATE_API_TOKEN ?? "",
     locationId: process.env.GHL_LOCATION_ID ?? "",
+    // Marketplace App — User Context (Embedded SSO). Read via getters so tests
+    // and runtime can set the env var after import. The Shared Secret is used
+    // ONLY server-side to decrypt the platform-provided user context; it is
+    // NEVER shipped to the browser.
+    get appId() { return process.env.GHL_APP_ID ?? ""; },
+    get sharedSecret() { return process.env.GHL_APP_SHARED_SECRET ?? ""; },
+    // OAuth 2.0 (Standalone SSO). Client credentials for the Marketplace App,
+    // exchanged server-side only — CLIENT_SECRET never reaches the frontend.
+    get oauthClientId() { return process.env.CLIENT_ID ?? ""; },
+    get oauthClientSecret() { return process.env.CLIENT_SECRET ?? ""; },
+    get oauthRedirectUri() { return process.env.REDIRECT_URI ?? ""; },
+    marketplaceBaseUrl: required("GHL_MARKETPLACE_BASE_URL", "https://marketplace.leadconnectorhq.com"),
   },
+
+  // Session lifetime (seconds). Short-lived JWT + server-side revocation list.
+  sessionTtlSeconds: Number(process.env.SESSION_TTL_SECONDS ?? 60 * 60 * 8),
+  // How often (seconds) the backend revalidates the user against the CRM
+  // directory (active? role unchanged? tenant still connected?).
+  revalidationIntervalSeconds: Number(process.env.REVALIDATION_INTERVAL_SECONDS ?? 60 * 10),
 
   webhookSecret: process.env.WEBHOOK_SECRET ?? "",
   schedulerIntervalMs: Number(process.env.SCHEDULER_INTERVAL_MS ?? 30000),
