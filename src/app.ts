@@ -13,6 +13,7 @@ import { tenantRepo } from "./repositories/tenantRepo";
 
 import { authRoutes } from "./routes/authRoutes";
 import { usersRoutes } from "./routes/usersRoutes";
+import { appUsersRoutes } from "./routes/appUsersRoutes";
 import { contactsRoutes } from "./routes/contactsRoutes";
 import { conversationsRoutes } from "./routes/conversationsRoutes";
 import { matriculasRoutes } from "./routes/matriculasRoutes";
@@ -23,6 +24,7 @@ import { configRoutes } from "./routes/configRoutes";
 import { followUpsRoutes } from "./routes/followUpsRoutes";
 import { scheduledMessagesRoutes } from "./routes/scheduledMessagesRoutes";
 import { calendarsRoutes } from "./routes/calendarsRoutes";
+import { opportunitiesRoutes } from "./routes/opportunitiesRoutes";
 
 export function createApp(): Router {
   const router = new Router();
@@ -41,6 +43,7 @@ export function createApp(): Router {
     if (config.nodeEnv === "production") {
       checks.jwtSecret = !!config.jwtSecret && config.jwtSecret !== "dev-jwt-secret-change-me";
       checks.encryptionKey = !!config.encryptionKey && config.encryptionKey !== "dev-encryption-key-change-me-32b";
+      checks.database = !!config.databaseUrl;
     }
     const ready = Object.values(checks).every(Boolean);
     sendJson(ctx.res, ready ? 200 : 503, { ready, checks });
@@ -76,6 +79,7 @@ export function createApp(): Router {
   const crm = new Router();
   authRoutes(crm);
   usersRoutes(crm);
+  appUsersRoutes(crm);
   contactsRoutes(crm);
   conversationsRoutes(crm);
   matriculasRoutes(crm);
@@ -86,6 +90,7 @@ export function createApp(): Router {
   followUpsRoutes(crm);
   scheduledMessagesRoutes(crm);
   calendarsRoutes(crm);
+  opportunitiesRoutes(crm);
 
   router.mount("/api/crm", crm);
 
