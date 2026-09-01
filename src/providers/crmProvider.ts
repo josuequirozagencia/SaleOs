@@ -21,7 +21,7 @@ import type {
   AppointmentStatus, IntegrationState, StudyArea, Program, CustomField,
   QuickReply, FollowUp, ScheduledMessage, ContactNote, TimelineEvent,
   Paginated, AppConfig, IntegrationConfig, UserProfile, Achievement,
-  CurrencyConfig, Role,
+  CurrencyConfig, Role, Pipeline, Opportunity, PaginatedOpportunities,
 } from "../types";
 
 export interface ListParams {
@@ -77,6 +77,11 @@ export interface CrmProvider {
   updateConversationPipeline(tenantId: string, conversationId: string, stage: PipelineStage): Promise<Conversation>;
   markConversationRead(tenantId: string, conversationId: string): Promise<void>;
   getConversationByContact(tenantId: string, contactId: string): Promise<Conversation | null>;
+
+  // ── Pipelines / Opportunities (CRM-native) ──────────────────────
+  listPipelines(tenantId: string): Promise<Pipeline[]>;
+  listOpportunities(tenantId: string, params: ListParams): Promise<PaginatedOpportunities>;
+  updateOpportunityStage(tenantId: string, id: string, stageId: string): Promise<Opportunity>;
 
   // ── Matrículas ────────────────────────────────────────────────────
   listMatriculas(tenantId: string, assignedTo?: string): Promise<Matricula[]>;
