@@ -24,9 +24,9 @@
  * follow-ups (tenant_id-scoped) via the provider.
  */
 
-import { getProvider } from "../services/providerService";
-import { tenantRepo } from "../repositories/tenantRepo";
-import { logger } from "../utils/router";
+import { getProvider } from "../../services/providerService";
+import { tenantRepo } from "../../repositories/tenantRepo";
+import { logger } from "../../utils/router";
 
 /** 5 minutes — the explicit threshold from the product spec. */
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
