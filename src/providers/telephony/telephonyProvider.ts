@@ -10,8 +10,8 @@
  * handles the live call leg + returns a providerCallId for later sync.
  */
 
-import { ApiError } from "../utils/errors";
-import { config } from "../config/env";
+import { ApiError } from "../../utils/errors";
+import { config } from "../../config/env";
 
 export interface StartCallInput {
   contactId: string;
