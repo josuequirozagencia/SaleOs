@@ -37,7 +37,7 @@ export function opportunitiesRoutes(router: Router) {
       const updated = await (provider as any).updateOpportunityStage(tenantId, ctx.params.id, stageId);
       ok(ctx, updated);
     } else {
-      throw new ApiError("PROVIDER_UNAVAILABLE", "Actualización de oportunidad no disponible");
+      throw new ApiError("VALIDATION_ERROR", "stageId es requerido");
     }
   });
 }
