@@ -161,7 +161,7 @@ export const authService = {
     // existing provider path so the frontend contract is unchanged.
     const profile = (await provider.getUserProfile(row.tenantId, row.ghlUserId))!;
 
-    return { token, user: crmUser, profile, session: { ...session, jti } };
+    return { token, user: { ...crmUser, role: row.role }, profile, session: { ...session, jti } };
   },
 
   // ── Embedded SSO ──────────────────────────────────────────────────────
@@ -277,7 +277,7 @@ export const authService = {
     const user = await provider.getUser(session.tenantId, session.ghlUserId);
     if (!user || !user.active) throw new ApiError("UNAUTHORIZED", "Sesión inválida");
     const profile = (await provider.getUserProfile(session.tenantId, session.ghlUserId))!;
-    return { user, profile };
+    return { user: { ...user, role: session.role }, profile };
   },
 
   // ── Revalidation ─────────────────────────────────────────────────────
