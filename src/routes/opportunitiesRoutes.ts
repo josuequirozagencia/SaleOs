@@ -31,13 +31,13 @@ export function opportunitiesRoutes(router: Router) {
   router.patch("/opportunities/:id/stage", requireAuth, async (ctx) => {
     const { provider, tenantId } = scope(ctx);
     const { stageId } = (ctx.body ?? {}) as { stageId?: string };
-    if (!stageId) throw new ApiError("BAD_REQUEST", "stageId es requerido");
+    if (!stageId) throw new ApiError("VALIDATION_ERROR", "stageId es requerido");
 
     if ((provider as any).updateOpportunityStage) {
       const updated = await (provider as any).updateOpportunityStage(tenantId, ctx.params.id, stageId);
       ok(ctx, updated);
     } else {
-      throw new ApiError("VALIDATION_ERROR", "stageId es requerido");
-    }
+  throw new ApiError("PROVIDER_UNAVAILABLE", "Actualización de oportunidad no disponible");
+}
   });
 }
