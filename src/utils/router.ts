@@ -140,9 +140,20 @@ export class Router {
       try {
         const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
         const pathSegments = url.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
-        const method = (req.method ?? "GET").toUpperCase() as HttpMethod;
+const rawMethod = (req.method ?? "GET").toUpperCase();
+const method = rawMethod as HttpMethod;
 
-        const route = this.routes.find((r) => r.method === method && matchRoute(r, pathSegments).ok);
+let route = this.routes.find(
+  (r) => r.method === method && matchRoute(r, pathSegments).ok
+);
+
+// CORS preflight: no OPTIONS routes are registered, so match the same path
+// under any method so the CORS middleware can run and respond 204 with the
+// proper Access-Control headers. Without this, preflight returns 404 before
+// CORS headers are set, blocking cross-origin requests from the browser.
+if (!route && rawMethod === "OPTIONS") {
+  route = this.routes.find((r) => matchRoute(r, pathSegments).ok);
+}
         if (!route) {
           logger.warn(`404 ${method} ${url.pathname}`, { requestId });
           return sendError(res, new ApiError("NOT_FOUND", `No route for ${method} ${url.pathname}`));
