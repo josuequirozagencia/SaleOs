@@ -209,7 +209,7 @@ export class GhlProvider implements CrmProvider {
       page: String(p.page ?? 1),
     });
     if (p.search) q.set("search", p.search);
-    if (p.assignedTo) q.set("assignedTo", p.assignedTo);
+    if (p.assignedTo && p.assignedTo !== "all") q.set("assignedTo", p.assignedTo);
     if (p.unreadOnly) q.set("unreadOnly", "true");
     if (p.assignedFilter === "assigned") q.set("assigned", "true");
     const data = await ghlFetch<{ conversations: any[]; total?: number }>(
