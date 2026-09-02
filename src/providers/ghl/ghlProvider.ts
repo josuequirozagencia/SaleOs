@@ -240,12 +240,65 @@ export class GhlProvider implements CrmProvider {
   }
   async sendMessage(tenantId: string, conversationId: string, payload: any) {
     const creds = getTenantCreds(tenantId);
-    const res = await ghlFetch<any>(tenantId, `/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ type: payload.attachment ? "TYPE_ATTACHMENT" : "text", ...payload, locationId: creds.locationId }) });
+    // Official endpoint: POST /conversations/messages (NOT /conversations/{id}/messages).
+    // Required fields: contactId, type, status. Text content goes in `message`
+    // (not `text`). Attachments are an array of URL strings. Resolve the real
+    // contactId from the conversation record — never trust the request body.
+    const conv = await this.getConversation(tenantId, conversationId);
+    if (!conv || !conv.contactId) {
+      throw new ApiError("PROVIDER_ERROR", "Cannot send message: conversation has no contactId");
+    }
+
+    const isInternal = payload.visibility === "internal";
+    // Map our visibility → official message type. Internal notes use
+    // InternalComment (with userId); external messages infer the channel type
+    // from the conversation (WhatsApp/SMS/etc.), defaulting to SMS.
+    let type: string;
+    if (isInternal) {
+      type = "InternalComment";
+    } else if (conv.channel === "whatsapp") {
+      type = "WhatsApp";
+    } else if (conv.channel === "instagram") {
+      type = "IG";
+    } else if (conv.channel === "messenger") {
+      type = "FB";
+    } else {
+      type = "SMS";
+    }
+
+    // Normalize attachments: the frontend sends a single object {url,...};
+    // the official API expects attachments: string[] (URLs).
+    const attachments: string[] = [];
+    if (payload.attachment) {
+      const a = payload.attachment;
+      const url = typeof a === "string" ? a : a.url;
+      if (url) attachments.push(url);
+    }
+
+    const body: Record<string, unknown> = {
+      type,
+      contactId: conv.contactId,
+      message: payload.text ?? "",
+      status: "delivered",
+      locationId: creds.locationId,
+      attachments,
+    };
+    if (isInternal && payload.ghlUserId) {
+      body.userId = payload.ghlUserId;
+    }
+
+    const res = await ghlFetch<any>(tenantId, `/conversations/messages`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
     return mapCrmMessage(res.message || res);
   }
   async sendTemplate(tenantId: string, conversationId: string, payload: any) {
     const creds = getTenantCreds(tenantId);
-    const res = await ghlFetch<any>(tenantId, `/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ ...payload, type: "template", locationId: creds.locationId }) });
+    const conv = await this.getConversation(tenantId, conversationId);
+    if (!conv || !conv.contactId) throw new ApiError("PROVIDER_ERROR", "Cannot send template: conversation has no contactId");
+    const type = conv.channel === "whatsapp" ? "WhatsApp" : "SMS";
+    const res = await ghlFetch<any>(tenantId, `/conversations/messages`, { method: "POST", body: JSON.stringify({ type, contactId: conv.contactId, status: "delivered", locationId: creds.locationId, templateId: payload.templateId, message: payload.text ?? "" }) });
     return mapCrmMessage(res.message || res);
   }
   async getTemplates(tenantId: string) {
