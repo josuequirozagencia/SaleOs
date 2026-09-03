@@ -205,7 +205,7 @@ export class MockProvider implements CrmProvider {
     if (c) c.unread = 0;
   }
   async getConversationByContact(_t: string, contactId: string) {
-    return conversations.filter((c) => c.contactId === contactId).sort((a, b) => b.lastTimestamp - a.lastTimestamp)[0] ?? null;
+    return conversations.filter((c) => c.contactId === contactId).sort((a, b) => (b.lastTimestamp ?? 0) - (a.lastTimestamp ?? 0))[0] ?? null;
   }
 
   // Pipelines / Opportunities (CRM-native)
@@ -327,8 +327,10 @@ export class MockProvider implements CrmProvider {
     for (const conv of conversations) {
       if (advisorFilter && conv.assignedTo !== advisorFilter) continue;
       const msgs = (messages[conv.id] ?? [])
-        .filter((m) => m.timestamp >= from && m.timestamp <= to)
-        .sort((a, b) => a.timestamp - b.timestamp);
+        // A message with no determinable instant is excluded from the window
+        // and from the cycle — never dated to "now".
+        .filter((m) => typeof m.timestamp === "number" && m.timestamp >= from && m.timestamp <= to)
+        .sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
 
       let pendingCustomerMsg: CrmMessage | null = null;
       let hadCustomerInPeriod = false;
@@ -341,7 +343,7 @@ export class MockProvider implements CrmProvider {
           if (!pendingCustomerMsg) pendingCustomerMsg = m;
           hadCustomerInPeriod = true;
         } else if (m.direction === "outbound" && m.visibility !== "internal" && pendingCustomerMsg) {
-          const rt = Math.round((m.timestamp - pendingCustomerMsg.timestamp) / 1000);
+          const rt = Math.round(((m.timestamp as number) - (pendingCustomerMsg.timestamp as number)) / 1000);
           if (rt >= 0) {
             intervals.push(rt);
             const a = byAdvisorMap.get(owner)!;

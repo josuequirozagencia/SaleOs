@@ -29,8 +29,10 @@ export interface Opportunity {
   contactName: string;
   monetaryValue: number;
   assignedTo: string | null;
-  createdAt: number;
-  updatedAt: number;
+  /** Epoch ms, or `null` when the CRM returned no parseable date. */
+  createdAt: number | null;
+  /** Epoch ms, or `null` when the CRM returned no parseable date. */
+  updatedAt: number | null;
 }
 
 /** Paginated opportunities result. */

@@ -1,0 +1,29 @@
+# Dependencies — restored with `npm install` (or `npm ci` once the
+# lockfile is committed). Never versioned.
+node_modules/
+
+# TypeScript build output — produced by `npm run build` (tsc -> dist/) and
+# rebuilt inside the Docker image. Never versioned.
+dist/
+*.tsbuildinfo
+
+# Secrets. Every credential lives in environment variables (Railway) and
+# NEVER in the repository. `env.example` documents the variable NAMES only
+# and stays tracked — it has no leading dot, so it is not matched here.
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Editor / OS artefacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test + coverage output (no runner configured yet; ready for when one is)
+coverage/
+.nyc_output/

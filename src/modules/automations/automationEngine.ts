@@ -63,7 +63,12 @@ async function checkConversationResponse(
   const provider = getProvider(tenantId);
   // Load the latest messages (page 1, most recent first per provider contract).
   const msgPage = await provider.getConversationMessages(tenantId, conversationId, 1, 20);
-  const msgs = [...msgPage.data].sort((a, b) => a.timestamp - b.timestamp);
+  // Messages whose instant the CRM did not return are EXCLUDED, not dated to
+  // "now": an invented timestamp would make an old unanswered message look
+  // fresh (suppressing a real alert) or a fresh one look overdue.
+  const msgs = msgPage.data
+    .filter((m) => typeof m.timestamp === "number")
+    .sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
   if (msgs.length === 0) return;
 
   // Find the last inbound (customer) message and check for a subsequent reply.
@@ -83,7 +88,7 @@ async function checkConversationResponse(
 
   if (hasReplyAfter) return; // answered — no alert.
 
-  const elapsed = Date.now() - lastInbound.timestamp;
+  const elapsed = Date.now() - (lastInbound.timestamp as number);
   if (elapsed < ALERT_THRESHOLD_MS) return; // still within the 5-min window.
 
   // Already alerted? Skip if an open alert follow-up exists for this contact.

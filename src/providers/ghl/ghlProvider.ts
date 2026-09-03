@@ -424,7 +424,12 @@ export class GhlProvider implements CrmProvider {
     const start = new Date(from).toISOString();
     const end = new Date(to).toISOString();
     const data = await ghlFetch<any>(tenantId, `/calendars/${calendarId}/free-slots?startDate=${start}&endDate=${end}`);
-    return (data.slots || []).map((s: any) => mapCrmSlot(s, calendarId));
+    // Slots whose start/end the CRM did not return in a parseable form are
+    // dropped: they cannot be booked against (the booking route matches on an
+    // exact `start`) and must never be shown with an invented time.
+    return (data.slots || [])
+      .map((s: any) => mapCrmSlot(s, calendarId))
+      .filter((s: any): s is NonNullable<typeof s> => s !== null);
   }
   async listAppointments(tenantId: string, p: any) {
     const creds = getTenantCreds(tenantId);

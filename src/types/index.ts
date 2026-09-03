@@ -82,7 +82,13 @@ export interface CrmMessage {
   senderId: string;
   direction: MessageDirection;
   text: string;
-  timestamp: number;
+  /**
+   * Epoch ms, or `null` when the CRM returned no parseable date. NEVER
+   * substitute `Date.now()` here — the response-time engine must exclude a
+   * message whose instant cannot be determined instead of counting a wrong
+   * interval.
+   */
+  timestamp: number | null;
   status: MessageStatus;
   contentType: "text" | "image" | "audio" | "video" | "document" | "template";
   isAi?: boolean;
@@ -107,7 +113,8 @@ export interface Conversation {
   contactAvatarColor: string;
   channel: MessageChannel;
   lastMessage: string;
-  lastTimestamp: number;
+  /** Epoch ms, or `null` when the CRM returned no parseable date. */
+  lastTimestamp: number | null;
   unread: number;
   assignedTo: string | null;
   tags: string[];
@@ -129,7 +136,8 @@ export interface Contact {
   sede?: string;
   tags: string[];
   assignedTo: string | null;
-  createdAt: number;
+  /** Epoch ms, or `null` when the CRM returned no parseable date. */
+  createdAt: number | null;
   lastActivityAt?: number;
   leadScore: number;
   matriculated: boolean;
@@ -406,8 +414,10 @@ export interface Appointment {
   contactId: string;
   contactName: string;
   ghlUserId: string;
-  start: number;
-  end: number;
+  /** Epoch ms, or `null` when the CRM returned no parseable date. */
+  start: number | null;
+  /** Epoch ms, or `null` when the CRM returned no parseable date. */
+  end: number | null;
   status: AppointmentStatus;
   title?: string;
   note?: string;

@@ -294,8 +294,13 @@ export const CatalogMixin = {
     let totalIncoming = 0; let totalAssigned = 0;
     try {
       const contacts = await this.crm(tenantId).listContacts(tenantId, { pageSize: 100 });
-      totalIncoming = contacts.data.filter((c: any) => c.createdAt >= from && c.createdAt <= to).length;
-      totalAssigned = contacts.data.filter((c: any) => c.createdAt >= from && c.createdAt <= to && c.assignedTo).length;
+      // `createdAt` is null when the CRM returned no parseable date. Such a
+      // contact must be EXCLUDED from the period, not counted: `null >= 0` is
+      // true in JS, so an unchecked comparison silently folds every undated
+      // contact into the window and inflates the lead total.
+      const inPeriod = (c: any) => typeof c.createdAt === "number" && c.createdAt >= from && c.createdAt <= to;
+      totalIncoming = contacts.data.filter(inPeriod).length;
+      totalAssigned = contacts.data.filter((c: any) => inPeriod(c) && c.assignedTo).length;
     } catch { /* CRM unavailable → metrics reported as 0 (N/D upstream) */ }
     const safeRate = (n: number, d: number) => (d <= 0 ? 0 : Math.round((n / d) * 1000) / 10);
     return {

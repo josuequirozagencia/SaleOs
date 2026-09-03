@@ -251,10 +251,13 @@ export class DbProvider implements CrmProvider {
       const crm = this.crm(tenantId);
       const contact = await crm.getContact(tenantId, contactId);
       if (!contact) return;
-      const tags = [...(contact.tags ?? [])];
+      let tags = [...(contact.tags ?? [])];
       const has = tags.some((t) => t.toLowerCase() === "matriculado");
       if (add && !has) tags.push("matriculado");
-      if (!add) tags.filter((t) => t.toLowerCase() !== "matriculado");
+      // `filter` returns a NEW array — the result must be assigned back, or the
+      // tag is never actually removed and the contact stays flagged as enrolled
+      // in the CRM forever after a matrícula is cancelled or deleted.
+      if (!add) tags = tags.filter((t) => t.toLowerCase() !== "matriculado");
       await crm.updateContactTags(tenantId, contactId, tags);
     } catch { /* best-effort tag sync */ }
   }
