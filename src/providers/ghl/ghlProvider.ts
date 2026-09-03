@@ -493,4 +493,8 @@ export class GhlProvider implements CrmProvider {
   // backend persists it per tenant; the CRM provider does not store it.
   async getCurrency(_t: string): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Currency is app-local tenant configuration"); }
   async updateCurrency(_t: string, _c: any): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Currency is app-local tenant configuration"); }
+
+  // ── Commercial rules (per-tenant, app-local) ────────────────────────
+  async getCommercialRules(_t: string): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Commercial rules are app-local tenant configuration"); }
+  async updateCommercialRules(_t: string, _r: any): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Commercial rules are app-local tenant configuration"); }
 }

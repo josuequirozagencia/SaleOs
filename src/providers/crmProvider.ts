@@ -21,7 +21,7 @@ import type {
   AppointmentStatus, IntegrationState, StudyArea, Program, CustomField,
   QuickReply, FollowUp, ScheduledMessage, ContactNote, TimelineEvent,
   Paginated, AppConfig, IntegrationConfig, UserProfile, Achievement,
-  CurrencyConfig, Role, Pipeline, Opportunity, PaginatedOpportunities,
+  CurrencyConfig, CommercialRules, Role, Pipeline, Opportunity, PaginatedOpportunities,
 } from "../types";
 
 export interface ListParams {
@@ -202,4 +202,12 @@ export interface CrmProvider {
   // ── Currency config (per-tenant, presentation only) ─────────────
   getCurrency(tenantId: string): Promise<CurrencyConfig>;
   updateCurrency(tenantId: string, config: CurrencyConfig): Promise<CurrencyConfig>;
+
+  /**
+   * Commercial rules (commission, bonuses, response-time thresholds).
+   * App-local tenant configuration persisted in Postgres — NOT a CRM entity,
+   * and never shared between tenants.
+   */
+  getCommercialRules(tenantId: string): Promise<CommercialRules>;
+  updateCommercialRules(tenantId: string, rules: CommercialRules): Promise<CommercialRules>;
 }

@@ -12,7 +12,7 @@
 import { query, withClient } from "../../db/client";
 import type {
   StudyArea, Program, CustomField, QuickReply, AppConfig,
-  CurrencyConfig, Achievement,
+  CurrencyConfig, CommercialRules, Achievement,
 } from "../../types";
 import {
   mapArea, mapProgram, mapCustomField, mapQuickReply,
@@ -25,6 +25,19 @@ const uid = (p: string) => `${p}_${now()}_${Math.random().toString(36).slice(2, 
 const DEFAULT_CURRENCY: CurrencyConfig = {
   currencyCode: "PEN", currencySymbol: "S/", currencyName: "Sol peruano",
   decimalDigits: 2, decimalSeparator: ".", thousandsSeparator: ",", position: "before",
+};
+
+/**
+ * Starting point for a tenant that has never saved commercial rules. Returned
+ * as a fresh copy so a caller mutating the result cannot corrupt the default
+ * for every other tenant.
+ */
+const DEFAULT_COMMERCIAL_RULES: CommercialRules = {
+  commissionType: "percentage",
+  commissionValue: 10,
+  commissionBase: "total",
+  bonusPerLevel: {},
+  responseTimeThresholds: { green: 120, yellow: 300, orange: 600, red: 600 },
 };
 
 export interface CatalogMixin {
@@ -58,6 +71,8 @@ export interface CatalogMixin {
   updateAppConfig(tenantId: string, updates: Partial<AppConfig>): Promise<AppConfig>;
   getCurrency(tenantId: string): Promise<CurrencyConfig>;
   updateCurrency(tenantId: string, config: CurrencyConfig): Promise<CurrencyConfig>;
+  getCommercialRules(tenantId: string): Promise<CommercialRules>;
+  updateCommercialRules(tenantId: string, rules: CommercialRules): Promise<CommercialRules>;
   // Achievements / Dashboard / Analytics
   getAchievement(tenantId: string, ghlUserId: string): Promise<Achievement>;
   getDashboardMetrics(tenantId: string, assignedTo?: string): Promise<Record<string, unknown>>;
@@ -239,6 +254,26 @@ export const CatalogMixin = {
     return config;
   },
 
+  // ── Commercial rules (per tenant) ───────────────────────────────────
+  // Persisted in tenant_config.commercial_rules, which already existed in the
+  // schema but was unused: the rules lived in a module-level variable, so one
+  // academy's settings overwrote every other academy's and a restart silently
+  // reset them all.
+  async getCommercialRules(this: CatalogMixin, tenantId: string): Promise<CommercialRules> {
+    if (!this.useDb()) return this.mock.getCommercialRules(tenantId);
+    const rows = await query<{ commercial_rules: CommercialRules | null }>(
+      `SELECT commercial_rules FROM tenant_config WHERE tenant_id = $1`, [tenantId]);
+    return rows[0]?.commercial_rules ?? { ...DEFAULT_COMMERCIAL_RULES };
+  },
+  async updateCommercialRules(this: CatalogMixin, tenantId: string, rules: CommercialRules): Promise<CommercialRules> {
+    if (!this.useDb()) return this.mock.updateCommercialRules(tenantId, rules);
+    await query(
+      `INSERT INTO tenant_config (tenant_id, commercial_rules) VALUES ($1,$2)
+       ON CONFLICT (tenant_id) DO UPDATE SET commercial_rules = EXCLUDED.commercial_rules`,
+      [tenantId, JSON.stringify(rules)]);
+    return rules;
+  },
+
   // ── Achievements / Dashboard / Analytics ────────────────────────────
   async getAchievement(this: CatalogMixin, tenantId: string, ghlUserId: string): Promise<Achievement> {
     if (!this.useDb()) return this.mock.getAchievement(tenantId, ghlUserId);
@@ -317,6 +352,7 @@ export const CatalogMixin = {
       "listCustomFields", "createCustomField", "updateCustomField", "removeCustomField",
       "listQuickReplies", "createQuickReply", "updateQuickReply", "removeQuickReply",
       "getAppConfig", "updateAppConfig", "getCurrency", "updateCurrency",
+      "getCommercialRules", "updateCommercialRules",
       "getAchievement", "getDashboardMetrics", "getResponseTimeAnalytics", "getConversionAnalytics",
     ];
     for (const name of methods) {
