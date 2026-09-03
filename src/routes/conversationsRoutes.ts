@@ -18,6 +18,13 @@ export function conversationsRoutes(router: Router) {
 
   router.get("/conversations/:id/messages", requireAuth, async (ctx) => {
     const { provider, tenantId } = scope(ctx);
+    // Resolve the real conversation owner and enforce scope BEFORE reading the
+    // history. The tenant CRM token can reach every conversation in the
+    // location, so without this check an advisor holding a conversation id
+    // could read another advisor's messages.
+    const conv = await provider.getConversation(tenantId, ctx.params.id);
+    if (!conv) throw new ApiError("NOT_FOUND", "Conversation not found");
+    enforceOwner(ctx, conv.assignedTo);
     // Messages are always paginated — no "load all" escape hatch.
     ok(ctx, await provider.getConversationMessages(tenantId, ctx.params.id, num(ctx, "page", 1), num(ctx, "pageSize", 50)));
   });
@@ -64,6 +71,9 @@ export function conversationsRoutes(router: Router) {
 
   router.get("/conversations/:id/scheduled", requireAuth, async (ctx) => {
     const { provider, tenantId } = scope(ctx);
+    const conv = await provider.getConversation(tenantId, ctx.params.id);
+    if (!conv) throw new ApiError("NOT_FOUND", "Conversation not found");
+    enforceOwner(ctx, conv.assignedTo);
     ok(ctx, await provider.listScheduledByConversation(tenantId, ctx.params.id));
   });
 
