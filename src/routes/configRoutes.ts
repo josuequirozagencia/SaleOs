@@ -4,7 +4,7 @@ import { requireAdmin, requireSuperAdmin } from "../auth/permissions";
 import { scope, ok } from "./helpers";
 import { auditRepo } from "../repositories/auditRepo";
 import { ApiError } from "../utils/errors";
-import type { CurrencyConfig } from "../types";
+import type { CurrencyConfig, CommercialRules } from "../types";
 
 // Supported currency codes (mirrors the frontend catalog).
 const SUPPORTED_CURRENCIES = new Set([
@@ -23,6 +23,36 @@ function validateCurrency(cfg: Partial<CurrencyConfig>): string | null {
   }
   if (cfg.decimalSeparator !== undefined && cfg.decimalSeparator === cfg.thousandsSeparator) {
     return "El separador decimal y de miles no pueden ser iguales.";
+  }
+  return null;
+}
+
+/**
+ * Validate commercial rules before persisting. The previous handler wrote the
+ * request body straight into storage with no checks; these values drive
+ * commission maths and the response-time thresholds, so a malformed payload
+ * would corrupt both.
+ */
+function validateCommercialRules(r: Partial<CommercialRules>): string | null {
+  if (r.commissionType !== "percentage" && r.commissionType !== "fixed") {
+    return "El tipo de comisión debe ser 'percentage' o 'fixed'.";
+  }
+  if (typeof r.commissionValue !== "number" || !Number.isFinite(r.commissionValue) || r.commissionValue < 0) {
+    return "El valor de la comisión debe ser un número mayor o igual a 0.";
+  }
+  if (r.commissionType === "percentage" && r.commissionValue > 100) {
+    return "Una comisión porcentual no puede superar el 100%.";
+  }
+  if (r.commissionBase !== "total" && r.commissionBase !== "paidAmount") {
+    return "La base de comisión debe ser 'total' o 'paidAmount'.";
+  }
+  const t = r.responseTimeThresholds;
+  if (!t || (["green", "yellow", "orange", "red"] as const).some(
+    (k) => typeof t[k] !== "number" || !Number.isFinite(t[k]) || t[k] < 0)) {
+    return "Los umbrales de tiempo de respuesta deben ser números mayores o iguales a 0.";
+  }
+  if (!(t.green <= t.yellow && t.yellow <= t.orange && t.orange <= t.red)) {
+    return "Los umbrales deben ir en orden ascendente: verde ≤ amarillo ≤ naranja ≤ rojo.";
   }
   return null;
 }
@@ -53,10 +83,24 @@ export function configRoutes(router: Router) {
   router.patch("/quick-replies/:id", requireAuth, async (ctx) => { requireAdmin(ctx.session!); const { provider, tenantId } = scope(ctx); ok(ctx, await provider.updateQuickReply(tenantId, ctx.params.id, ctx.body as any)); });
   router.delete("/quick-replies/:id", requireAuth, async (ctx) => { requireAdmin(ctx.session!); const { provider, tenantId } = scope(ctx); await provider.removeQuickReply(tenantId, ctx.params.id); ok(ctx, { ok: true }); });
 
-  // Commercial rules (stored as app config; admin-only writes)
-  let commercialRules = { commissionType: "percentage" as "percentage" | "fixed", commissionValue: 10, commissionBase: "total" as "total" | "paidAmount", bonusPerLevel: {} as Record<string, number>, responseTimeThresholds: { green: 120, yellow: 300, orange: 600, red: 600 } };
-  router.get("/commercial-rules", requireAuth, async (ctx) => ok(ctx, commercialRules));
-  router.put("/commercial-rules", requireAuth, async (ctx) => { requireAdmin(ctx.session!); commercialRules = { ...(ctx.body as any) }; auditRepo.record({ tenantId: ctx.session!.tenantId, ghlUserId: ctx.session!.ghlUserId, action: "commercial_rules_updated", resource: "config", resourceId: "rules" }); ok(ctx, commercialRules); });
+  // Commercial rules — per-tenant, persisted in Postgres (admin-only writes).
+  // These were previously held in a module-level variable, which meant every
+  // academy shared one object: an admin saving here overwrote every other
+  // tenant's settings, and a restart reset them all to the hardcoded values.
+  router.get("/commercial-rules", requireAuth, async (ctx) => {
+    const { provider, tenantId } = scope(ctx);
+    ok(ctx, await provider.getCommercialRules(tenantId));
+  });
+  router.put("/commercial-rules", requireAuth, async (ctx) => {
+    requireAdmin(ctx.session!);
+    const { provider, tenantId } = scope(ctx);
+    const rules = (ctx.body ?? {}) as CommercialRules;
+    const error = validateCommercialRules(rules);
+    if (error) throw new ApiError("VALIDATION_ERROR", error);
+    const saved = await provider.updateCommercialRules(tenantId, rules);
+    auditRepo.record({ tenantId, ghlUserId: ctx.session!.ghlUserId, action: "commercial_rules_updated", resource: "config", resourceId: "rules" });
+    ok(ctx, saved);
+  });
 
   // App config (global app identity)
   router.get("/app-config", requireAuth, async (ctx) => { const { provider, tenantId } = scope(ctx); ok(ctx, await provider.getAppConfig(tenantId)); });

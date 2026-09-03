@@ -473,7 +473,10 @@ export class GhlProvider implements CrmProvider {
       page: String(p.page ?? 1),
     });
     if (p.search) q.set("q", p.search);
-    if (p.assignedTo) q.set("assigned_to", p.assignedTo);
+    // "all" is the app's own sentinel for "no advisor filter" — it is NOT a
+    // user id. Sending it literally makes the CRM search for a user called
+    // "all" and return an empty list. Same rule as listConversations.
+    if (p.assignedTo && p.assignedTo !== "all") q.set("assigned_to", p.assignedTo);
     const data = await ghlFetch<any>(tenantId, `/opportunities/search?${q}`);
     const opps = (data.opportunities || []).map(mapCrmOpportunity);
     return { data: opps, total: data.meta?.total ?? opps.length, page: p.page ?? 1, pageSize: p.pageSize ?? 50, hasMore: opps.length === (p.pageSize ?? 50) };
@@ -495,4 +498,8 @@ export class GhlProvider implements CrmProvider {
   // backend persists it per tenant; the CRM provider does not store it.
   async getCurrency(_t: string): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Currency is app-local tenant configuration"); }
   async updateCurrency(_t: string, _c: any): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Currency is app-local tenant configuration"); }
+
+  // ── Commercial rules (per-tenant, app-local) ────────────────────────
+  async getCommercialRules(_t: string): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Commercial rules are app-local tenant configuration"); }
+  async updateCommercialRules(_t: string, _r: any): Promise<any> { throw new ApiError("PROVIDER_UNAVAILABLE", "Commercial rules are app-local tenant configuration"); }
 }

@@ -19,7 +19,7 @@ import type {
   AppointmentStatus, IntegrationState, StudyArea, Program, CustomField,
   QuickReply, FollowUp, ScheduledMessage, ContactNote, TimelineEvent,
   Paginated, AppConfig, IntegrationConfig, UserProfile, Achievement,
-  CurrencyConfig, Role, Pipeline, Opportunity,
+  CurrencyConfig, CommercialRules, Role, Pipeline, Opportunity,
 } from "../../types";
 import { MATRICULA_DUPLICATE_CODE } from "../../types";
 import {
@@ -35,6 +35,16 @@ import {
 
 const now = () => Date.now();
 const id = (p: string) => `${p}_${now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+/** Commercial rules per tenant (never a single shared object). */
+const DEFAULT_COMMERCIAL_RULES: CommercialRules = {
+  commissionType: "percentage",
+  commissionValue: 10,
+  commissionBase: "total",
+  bonusPerLevel: {},
+  responseTimeThresholds: { green: 120, yellow: 300, orange: 600, red: 600 },
+};
+const commercialRules = new Map<string, CommercialRules>();
 
 const users: CrmUser[] = seedUsers.map((u) => ({ ...u }));
 const profiles: Record<string, UserProfile> = { ...seedProfiles };
@@ -548,6 +558,16 @@ export class MockProvider implements CrmProvider {
   // Currency config (per-tenant, presentation only)
   async getCurrency(_t: string) { return { ...(appConfig.currency ?? DEFAULT_CURRENCY) }; }
   async updateCurrency(_t: string, config: CurrencyConfig) { appConfig = { ...appConfig, currency: { ...config } }; setSeedAppConfig(appConfig); return { ...appConfig.currency! }; }
+
+  // Commercial rules — kept per tenant even in the mock, so the in-memory
+  // fallback cannot mask the cross-tenant leak the real provider fixes.
+  async getCommercialRules(tenantId: string): Promise<CommercialRules> {
+    return { ...(commercialRules.get(tenantId) ?? DEFAULT_COMMERCIAL_RULES) };
+  }
+  async updateCommercialRules(tenantId: string, rules: CommercialRules): Promise<CommercialRules> {
+    commercialRules.set(tenantId, { ...rules });
+    return { ...rules };
+  }
 }
 
 export const mockProvider = new MockProvider();
