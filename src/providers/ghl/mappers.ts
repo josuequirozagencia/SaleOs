@@ -51,16 +51,27 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function parseEpochMs(dateVal: unknown): number {
-  if (!dateVal) return Date.now();
-  if (typeof dateVal === "number") return dateVal;
+/**
+ * Parse a CRM date value into epoch milliseconds.
+ *
+ * Returns `null` when the value is missing, empty or unparseable. It must
+ * NEVER fall back to `Date.now()`: a fabricated "now" turns an unknown
+ * historical instant into a fresh one, which silently corrupts every
+ * response-time and SLA calculation built on top of it (a message with no
+ * date would appear to have arrived this second, yielding a 0s or negative
+ * interval). Callers propagate the null so the metrics engine can EXCLUDE
+ * the message/cycle it cannot determine, rather than counting a wrong value.
+ */
+export function parseEpochMs(dateVal: unknown): number | null {
+  if (!dateVal) return null;
+  if (typeof dateVal === "number") return Number.isFinite(dateVal) ? dateVal : null;
   if (typeof dateVal === "string") {
     const num = Number(dateVal);
     if (!isNaN(num) && num > 1000000000000) return num;
     const parsed = new Date(dateVal).getTime();
     if (!isNaN(parsed)) return parsed;
   }
-  return Date.now();
+  return null;
 }
 
 // ── Users Mapper ─────────────────────────────────────────────────────────────
@@ -112,7 +123,7 @@ export function mapCrmContact(raw: any): Contact {
   const tags: string[] = Array.isArray(raw.tags) ? raw.tags.map(String) : [];
   const assignedTo = raw.assignedTo ? String(raw.assignedTo) : null;
   const createdAt = parseEpochMs(raw.dateAdded || raw.createdAt);
-  const lastActivityAt = raw.dateUpdated || raw.lastActivity ? parseEpochMs(raw.dateUpdated || raw.lastActivity) : undefined;
+  const lastActivityAt = parseEpochMs(raw.dateUpdated || raw.lastActivity) ?? undefined;
 
   const isMatriculated = tags.some((t) => t.toLowerCase() === "matriculado") || Boolean(raw.matriculated);
 
@@ -247,9 +258,16 @@ export function mapCrmCalendar(raw: any): Calendar {
 
 // ── TimeSlot Mapper ──────────────────────────────────────────────────────────
 
-export function mapCrmSlot(raw: any, calendarId: string): TimeSlot {
+/**
+ * Map a CRM free-slot. Returns `null` when either bound is unparseable: a slot
+ * without a real start/end cannot be displayed or booked against (the booking
+ * route matches on an exact `start`), so it is dropped by the caller rather
+ * than surfaced with an invented time.
+ */
+export function mapCrmSlot(raw: any, calendarId: string): TimeSlot | null {
   const start = parseEpochMs(raw.start || raw.startTime);
   const end = parseEpochMs(raw.end || raw.endTime);
+  if (start === null || end === null) return null;
   return {
     id: `slot_${start}_${end}`,
     calendarId,
@@ -287,7 +305,7 @@ export function mapCrmAppointment(raw: any): Appointment {
     status,
     title: raw.title ? String(raw.title) : undefined,
     note: raw.notes || raw.note ? String(raw.notes || raw.note) : undefined,
-    createdAt: raw.createdAt ? parseEpochMs(raw.createdAt) : undefined,
-    updatedAt: raw.updatedAt ? parseEpochMs(raw.updatedAt) : undefined,
+    createdAt: parseEpochMs(raw.createdAt) ?? undefined,
+    updatedAt: parseEpochMs(raw.updatedAt) ?? undefined,
   };
 }

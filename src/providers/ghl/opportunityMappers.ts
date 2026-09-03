@@ -5,6 +5,7 @@
  * the shared ones from ../../types (re-exported here for convenience).
  */
 import type { Opportunity, Pipeline, PipelineStageInfo } from "../../types";
+import { parseEpochMs } from "./mappers";
 export type { Opportunity, Pipeline, PipelineStageInfo };
 
 export function mapCrmPipeline(raw: any): Pipeline {
@@ -46,7 +47,10 @@ export function mapCrmOpportunity(raw: any): Opportunity {
     contactName,
     monetaryValue: typeof raw.monetaryValue === "number" ? raw.monetaryValue : 0,
     assignedTo: raw.assignedTo ? String(raw.assignedTo) : null,
-    createdAt: raw.createdAt ? new Date(raw.createdAt).getTime() : Date.now(),
-    updatedAt: raw.updatedAt ? new Date(raw.updatedAt).getTime() : Date.now(),
+    // Same rule as every other CRM date: never fabricate `Date.now()` for a
+    // missing value, and never let `new Date("…").getTime()` store a silent
+    // NaN. parseEpochMs returns null when the instant cannot be determined.
+    createdAt: parseEpochMs(raw.createdAt),
+    updatedAt: parseEpochMs(raw.updatedAt),
   };
 }
