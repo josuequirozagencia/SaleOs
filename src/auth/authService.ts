@@ -257,7 +257,16 @@ export const authService = {
    * or changes tenant — it re-derives them from the CRM record.
    */
   async refresh(session: AuthSession): Promise<{ token: string; jti: string }> {
-    const { user, profile: _p, role } = await resolveUserRecord(session.tenantId, session.ghlUserId, session.role);
+    // Confirm the user still exists and is active in the CRM directory.
+    const { role: crmRole } = await resolveUserRecord(session.tenantId, session.ghlUserId, session.role);
+    // Re-derive the role from the SAME authority that issued it. For accounts
+    // that sign in natively, BeautyCRM's app_users row is the authorization
+    // authority (login() already issues the session from it). Taking the CRM
+    // record's role here instead would silently demote an app_users admin
+    // whose CRM user record is a plain "advisor" on the first refresh —
+    // reintroducing the exact conflict the native-login path resolves.
+    const appUser = await appUserRepo.getByGhlUserId(session.tenantId, session.ghlUserId);
+    const role: Role = appUser?.role ?? crmRole;
     const { token, jti } = await issueSession(session.ghlUserId, session.tenantId, session.locationId, role);
     // Revoke the old session jti to prevent concurrent use of the stale token.
     if (session.jti) await sessionStore.revoke(session.jti);
