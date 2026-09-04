@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "salesos",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dist/server.js"],
+      "port": 3001
+    }
+  ]
+}

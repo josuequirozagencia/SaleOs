@@ -3,6 +3,8 @@
  * Throws on missing required secrets so misconfiguration fails fast.
  */
 
+import { resolve } from "node:path";
+
 function required(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
   if (!v) {
@@ -19,6 +21,13 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 3001),
   corsOrigin: (process.env.CORS_ORIGIN ?? "http://localhost:5173,http://localhost:8080").split(",").map((s) => s.trim()).filter(Boolean),
+
+  /**
+   * Directory holding the compiled frontend. In the Docker image the build is
+   * copied to /app/web; locally it resolves to web/dist relative to the repo.
+   * When the directory is absent the server simply runs API-only.
+   */
+  webRoot: process.env.WEB_ROOT ?? resolve(__dirname, "../../web/dist"),
 
   jwtSecret: required("JWT_SECRET", "dev-jwt-secret-change-me"),
   encryptionKey: required("ENCRYPTION_KEY", "dev-encryption-key-change-me-32b"),
