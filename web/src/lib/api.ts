@@ -8,12 +8,19 @@
  */
 
 import type {
+  Contact,
   Conversation,
   CrmMessage,
   CrmUser,
+  CurrencyConfig,
+  CustomField,
   LoginResponse,
+  Matricula,
+  MatriculaInput,
   Paginated,
+  Program,
   SessionResponse,
+  StudyArea,
 } from "./types";
 
 const BASE = "/api/crm";
@@ -130,4 +137,38 @@ export const api = {
         method: "POST",
       }),
   },
+
+  contacts: {
+    list: (params: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      matriculated?: boolean;
+    }) => request<Paginated<Contact>>(`/contacts${qs(params)}`),
+  },
+
+  matriculas: {
+    /** Returns the full list — this endpoint is not paginated server-side. */
+    list: () => request<Matricula[]>("/matriculas"),
+
+    create: (data: MatriculaInput) =>
+      request<Matricula>("/matriculas", { method: "POST", body: JSON.stringify(data) }),
+
+    cancel: (id: string) =>
+      request<Matricula>(`/matriculas/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+
+    remove: (id: string) =>
+      request<{ ok: boolean }>(`/matriculas/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
+  config: {
+    areas: () => request<StudyArea[]>("/areas"),
+    programsByArea: (areaId: string) =>
+      request<Program[]>(`/areas/${encodeURIComponent(areaId)}/programs`),
+    customFields: () => request<CustomField[]>("/custom-fields"),
+    currency: () => request<CurrencyConfig>("/settings/currency"),
+  },
 };
+
+/** The backend's code for "this contact already has a matrícula". */
+export const MATRICULA_DUPLICATE_CODE = "MATRICULA_ALREADY_EXISTS";

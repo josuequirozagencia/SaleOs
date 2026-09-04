@@ -85,3 +85,101 @@ export interface SessionResponse {
 export interface LoginResponse extends SessionResponse {
   token: string;
 }
+
+// ── Matrículas ───────────────────────────────────────────────────────────
+
+export type PaymentMethod =
+  | "efectivo" | "tarjeta" | "transferencia" | "yape" | "plin" | "otro";
+
+export type MatriculaStatus = "pendiente" | "abonado" | "matriculado" | "anulado";
+
+export interface Matricula {
+  id: string;
+  contactId: string;
+  contactName: string;
+  contactPhone: string;
+  firstName?: string;
+  lastName?: string;
+  age?: number;
+  area: string;
+  areaId?: string;
+  programId?: string;
+  total: number;
+  abono: number;
+  /** Computed by the backend — never sent on create. */
+  pendiente: number;
+  paymentMethod: PaymentMethod;
+  /** Enrollment date, epoch ms. */
+  date: number;
+  status: MatriculaStatus;
+  assignedTo: string;
+  notes?: string;
+  customFields?: Record<string, string | string[] | boolean | number>;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/** Payload for POST /matriculas — `pendiente` is derived server-side. */
+export type MatriculaInput = Omit<Matricula, "id" | "pendiente" | "createdAt" | "updatedAt" | "assignedTo">;
+
+// ── Contacts (enough for the picker) ─────────────────────────────────────
+
+export interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  area?: string;
+  tags: string[];
+  assignedTo: string | null;
+  /** Epoch ms, or null when the CRM gave no parseable date. */
+  createdAt: number | null;
+  matriculated: boolean;
+  matriculaId?: string;
+  avatarColor: string;
+  initials: string;
+}
+
+// ── Tenant configuration ─────────────────────────────────────────────────
+
+export interface CurrencyConfig {
+  currencyCode: string;
+  currencySymbol: string;
+  currencyName: string;
+  decimalDigits: number;
+  decimalSeparator: string;
+  thousandsSeparator: string;
+  position: "before" | "after";
+}
+
+export interface StudyArea {
+  id: string;
+  name: string;
+  active: boolean;
+  order?: number;
+}
+
+export interface Program {
+  id: string;
+  areaId: string;
+  name: string;
+  active: boolean;
+  order?: number;
+}
+
+export type CustomFieldType =
+  | "TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "TEXTAREA"
+  | "SELECT" | "MULTISELECT" | "CHECKBOX" | "RADIO" | "FILE" | "IMAGE";
+
+export interface CustomField {
+  id: string;
+  name: string;
+  key: string;
+  type: CustomFieldType;
+  placeholder?: string;
+  description?: string;
+  required: boolean;
+  active: boolean;
+  order: number;
+  options?: string[];
+}

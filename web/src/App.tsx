@@ -1,8 +1,9 @@
-import { LogOut, MessageSquare, Sparkles } from "lucide-react";
+import { GraduationCap, LogOut, MessageSquare, Sparkles } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { LoginPage } from "@/pages/LoginPage";
 import { ConversationsPage } from "@/pages/ConversationsPage";
+import { MatriculasPage } from "@/pages/MatriculasPage";
 import { Avatar, Button, Spinner } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +12,10 @@ import { cn } from "@/lib/utils";
  * screen that has not been rebuilt yet would be a dead end, and this app is
  * being migrated section by section.
  */
-const NAV = [{ to: "/conversaciones", label: "Conversaciones", icon: MessageSquare }];
+const NAV = [
+  { to: "/conversaciones", label: "Conversaciones", icon: MessageSquare },
+  { to: "/matriculas", label: "Matrículas", icon: GraduationCap },
+];
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -86,6 +90,7 @@ export function App() {
     <AppShell>
       <Routes>
         <Route path="/conversaciones" element={<ConversationsPage />} />
+        <Route path="/matriculas" element={<MatriculasPage />} />
         <Route path="*" element={<Navigate to="/conversaciones" replace />} />
       </Routes>
     </AppShell>
