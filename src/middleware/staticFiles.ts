@@ -36,6 +36,16 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webmanifest": "application/manifest+json",
 };
 
+/**
+ * True when the path names a static file rather than a client-side route.
+ * Only extensions this server actually serves count, so an app route that
+ * happens to contain a dot (`/contactos/ana.perez`) is not mistaken for one.
+ */
+function isAssetPath(pathname: string): boolean {
+  const ext = extname(pathname).toLowerCase();
+  return ext !== "" && ext in CONTENT_TYPES;
+}
+
 async function fileSize(path: string): Promise<number | null> {
   try {
     const s = await stat(path);
@@ -83,11 +93,18 @@ export function createStaticHandler(root: string) {
 
     if (!filePath) {
       // SPA fallback: a client-side route like /conversaciones is not a file.
-      // Only fall back for navigations — a missing asset must stay a 404, not
-      // silently return HTML that the browser then fails to parse as JS.
-      const accepts = String(req.headers.accept ?? "");
-      const looksLikeAsset = extname(pathname) !== "";
-      if (looksLikeAsset || !accepts.includes("text/html")) return false;
+      //
+      // A request for something that looks like a static file (.js, .css, .png)
+      // and is not on disk must stay a 404 — answering it with index.html hands
+      // the browser HTML to parse as JavaScript, which fails confusingly.
+      //
+      // Everything else is treated as a navigation and gets the app shell.
+      // This deliberately does NOT depend on the Accept header: curl, uptime
+      // monitors and some proxies send */* for perfectly ordinary requests,
+      // and answering those with 404 makes a healthy deploy look broken.
+      // Only known asset extensions count, so a route that happens to contain
+      // a dot is still routed to the app.
+      if (isAssetPath(pathname)) return false;
 
       const indexPath = join(rootDir, "index.html");
       size = await fileSize(indexPath);
